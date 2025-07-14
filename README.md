@@ -1,4 +1,5 @@
 # delivery
+<<<<<<< HEAD
 
 Assignment
 
@@ -14,3 +15,6 @@ A few resources to get you started if this is your first Flutter project:
 For help getting started with Flutter development, view the
 [online documentation](https://docs.flutter.dev/), which offers tutorials,
 samples, guidance on mobile development, and a full API reference.
+=======
+mobile development assignment
+>>>>>>> a12c61d109bfc5d0eec67a293de00384bf490cc6
