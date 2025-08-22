@@ -141,7 +141,7 @@ class DeliveryListPage extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     const Text(
-                      "testing",
+                      "try",
                       style: TextStyle(
                         fontSize: 24,
                         fontWeight: FontWeight.bold,
