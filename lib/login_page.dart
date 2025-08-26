@@ -62,16 +62,14 @@ class _LoginPageState extends State<LoginPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
-
             const SizedBox(height: 80),
-
             // Logo and Title
             const Text(
               'GREENSTEM AUTO',
               style: TextStyle(
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
-                color: Color(0xFF1B5E20),
+                color: Color(0xFF1B6C07),
               ),
               textAlign: TextAlign.center,
             ),
@@ -147,7 +145,7 @@ class _LoginPageState extends State<LoginPage> {
             ElevatedButton(
               onPressed: _login,
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF1B5E20),
+                backgroundColor: const Color(0xFF1B6C07),
                 padding: const EdgeInsets.symmetric(vertical: 15.0),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(15.0),
