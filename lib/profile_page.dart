@@ -29,7 +29,7 @@ class _ProfilePageState extends State<ProfilePage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Profile'),
-        backgroundColor: const Color(0xFF1B5E20),
+        backgroundColor: const Color(0xFF1B6C07),
         elevation: 0,
       ),
 
@@ -40,7 +40,7 @@ class _ProfilePageState extends State<ProfilePage> {
             width: double.infinity,
             padding: const EdgeInsets.symmetric(vertical: 40.0),
             decoration: const BoxDecoration(
-              color: Color(0xFF1B5E20),
+              color: Color(0xFF1B6C07),
               borderRadius: BorderRadius.vertical(bottom: Radius.circular(30)),
             ),
 
@@ -54,7 +54,7 @@ class _ProfilePageState extends State<ProfilePage> {
                     backgroundColor: Colors.white,
                     backgroundImage: _image != null ? FileImage(_image!) : null,
                     child: _image == null
-                        ? const Icon(Icons.person, size: 50, color: Color(0xFF1B5E20))
+                        ? const Icon(Icons.person, size: 50, color: Color(0xFF1B6C07))
                         : null,
                   ),
                 ),
