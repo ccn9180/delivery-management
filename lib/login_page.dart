@@ -22,7 +22,8 @@ class _LoginPageState extends State<LoginPage> {
       return;
     }
 
-    if (!_emailController.text.contains('@') || !_emailController.text.contains('.')) {
+    if (!_emailController.text.contains('@') ||
+        !_emailController.text.contains('.')) {
       setState(() {
         _errorMessage = 'Please enter a valid email.';
       });
@@ -32,7 +33,8 @@ class _LoginPageState extends State<LoginPage> {
     const String correctEmail = 'test2715605@gmail.com';
     const String correctPassword = 'Tester123@';
 
-    if (_emailController.text == correctEmail && _passwordController.text == correctPassword) {
+    if (_emailController.text == correctEmail &&
+        _passwordController.text == correctPassword) {
       print('Login successfully!');
       Navigator.pushReplacement(
         context,
@@ -53,125 +55,138 @@ class _LoginPageState extends State<LoginPage> {
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
-        title: const Text('Login', style: TextStyle(color: Colors.black)),
         centerTitle: false,
       ),
 
       body: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(horizontal: 40.0, vertical: 20.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: <Widget>[
-            const SizedBox(height: 80),
-            // Logo and Title
-            const Text(
-              'GREENSTEM AUTO',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF1B6C07),
-              ),
-              textAlign: TextAlign.center,
-            ),
-
-            const SizedBox(height: 20),
-            Image.asset(
-              'assets/download.png',
-              height: 100,
-            ),
-
-            const SizedBox(height: 10),
-
-            const Text(
-              'Welcome, Delivery Partner',
-              style: TextStyle(
-                fontSize: 16,
-                color: Colors.black54,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 40),
-
-            // Email
-            TextField(
-              controller: _emailController,
-              decoration: InputDecoration(
-                hintText: 'Email',
-                filled: true,
-                fillColor: Colors.grey,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(15.0),
-                  borderSide: BorderSide.none,
+        child: Center(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              // Logo and Title
+              SizedBox(height:49.5),
+              const Text(
+                'GREENSTEM AUTO',
+                style: TextStyle(
+                  fontSize: 33,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF1B6C07),
                 ),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 15.0),
+                textAlign: TextAlign.center,
               ),
-            ),
 
-            const SizedBox(height: 20),
+              Image.asset('assets/images/logo.png', height: 200),
 
-            // Password
-            TextField(
-              controller: _passwordController,
-              obscureText: !_passwordVisible,
-              decoration: InputDecoration(
-                hintText: 'Password',
-                filled: true,
-                fillColor: Colors.grey,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(15.0),
-                  borderSide: BorderSide.none,
+              const Text(
+                'Welcome, Delivery Partner',
+                style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w400,
+                  color: Colors.black54,
                 ),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 15.0),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 40),
 
-                //Eye
-                suffixIcon: IconButton(
-                  icon: Icon(
-                    _passwordVisible ? Icons.visibility : Icons.visibility_off,
-                    color: Colors.black,
+              // Email
+              TextField(
+                controller: _emailController,
+                keyboardType: TextInputType.emailAddress,
+                decoration: InputDecoration(
+                  hintText: 'Email',
+                  hintStyle: TextStyle(
+                    fontSize: 15,
+                  ),
+                  filled: true,
+                  fillColor: Colors.grey.shade100,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12.0),
+                    borderSide: BorderSide.none,
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 20.0,
+                    vertical: 13.0,
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 20),
+
+              // Password
+              TextField(
+                keyboardType: TextInputType.text,
+                controller: _passwordController,
+                obscureText: !_passwordVisible,
+                decoration: InputDecoration(
+                  hintText: 'Password',
+                  hintStyle: TextStyle(
+                    fontSize: 15,
+                  ),
+                  filled: true,
+                  fillColor: Colors.grey.shade100,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12.0),
+                    borderSide: BorderSide.none,
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 20.0,
+                    vertical: 13.0,
                   ),
 
-                  onPressed: () {
-                    setState(() {
-                      _passwordVisible = !_passwordVisible;
-                    });
-                  },
-                ),
-              ),
-            ),
+                  //Eye
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      _passwordVisible
+                          ? Icons.visibility
+                          : Icons.visibility_off,
+                      color: Colors.black,
+                    ),
 
-            const SizedBox(height: 30),
-
-            // Login Button
-            ElevatedButton(
-              onPressed: _login,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF1B6C07),
-                padding: const EdgeInsets.symmetric(vertical: 15.0),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(15.0),
+                    onPressed: () {
+                      setState(() {
+                        _passwordVisible = !_passwordVisible;
+                      });
+                    },
+                  ),
                 ),
               ),
 
-              child: const Text('LOGIN',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 18,
+              const SizedBox(height: 50),
+
+              // Login Button
+              ElevatedButton(
+                onPressed: _login,
+                style: ElevatedButton.styleFrom(
+                  elevation: 2.5,
+                  backgroundColor: const Color(0xFF1B6C07),
+                  padding: const EdgeInsets.symmetric(horizontal: 22.0,
+                    vertical: 13.0),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12.0),
+                  ),
+                ),
+
+                child: const Text(
+                  'LOGIN',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                  ),
                 ),
               ),
-            ),
 
-            const SizedBox(height: 20.0),
+              const SizedBox(height: 20.0),
 
-
-            if (_errorMessage.isNotEmpty)
-              Text(
-                _errorMessage,
-                style: const TextStyle(color: Colors.red, fontSize: 14),
-                textAlign: TextAlign.center,
-
-              ),
-          ],
+              if (_errorMessage.isNotEmpty)
+                Text(
+                  _errorMessage,
+                  style: const TextStyle(color: Colors.red, fontSize: 14),
+                  textAlign: TextAlign.center,
+                ),
+            ],
+          ),
         ),
       ),
     );
