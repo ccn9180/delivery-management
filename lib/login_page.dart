@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'homepage.dart';
 
 class LoginPage extends StatefulWidget {
@@ -14,37 +15,43 @@ class _LoginPageState extends State<LoginPage> {
   String _errorMessage = '';
   bool _passwordVisible = false;
 
-  void _login() {
-    if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {
-      setState(() {
-        _errorMessage = 'Please fill out all fields.';
-      });
-      return;
-    }
+  void _login() async {
+    try {
+      if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {
+        setState(() {
+          _errorMessage = 'Please fill out all fields.';
+        });
+        return;
+      }
 
-    if (!_emailController.text.contains('@') ||
-        !_emailController.text.contains('.')) {
-      setState(() {
-        _errorMessage = 'Please enter a valid email.';
-      });
-      return;
-    }
+      // Firebase login
+      UserCredential userCredential = await FirebaseAuth.instance
+          .signInWithEmailAndPassword(
+            email: _emailController.text.trim(),
+            password: _passwordController.text.trim(),
+          );
 
-    const String correctEmail = 'test2715605@gmail.com';
-    const String correctPassword = 'Tester123@';
+      // Success
+      print("Login successfully: ${userCredential.user!.email}");
 
-    if (_emailController.text == correctEmail &&
-        _passwordController.text == correctPassword) {
-      print('Login successfully!');
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (context) => const HomePage()),
       );
-    } else {
+    } on FirebaseAuthException catch (e) {
       setState(() {
-        _errorMessage = 'Invalid email or password.';
+        if (e.code == 'user-not-found') {
+          _errorMessage = 'No user found for that email.';
+        } else if (e.code == 'wrong-password') {
+          _errorMessage = 'Wrong password provided.';
+        } else {
+          _errorMessage = e.message ?? 'Login failed!';
+        }
       });
-      print('Login failed!');
+    } catch (e) {
+      setState(() {
+        _errorMessage = "Error: $e";
+      });
     }
   }
 
@@ -65,7 +72,7 @@ class _LoginPageState extends State<LoginPage> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
               // Logo and Title
-              SizedBox(height:49.5),
+              SizedBox(height: 49.5),
               const Text(
                 'GREENSTEM AUTO',
                 style: TextStyle(
@@ -95,9 +102,7 @@ class _LoginPageState extends State<LoginPage> {
                 keyboardType: TextInputType.emailAddress,
                 decoration: InputDecoration(
                   hintText: 'Email',
-                  hintStyle: TextStyle(
-                    fontSize: 15,
-                  ),
+                  hintStyle: TextStyle(fontSize: 15),
                   filled: true,
                   fillColor: Colors.grey.shade100,
                   border: OutlineInputBorder(
@@ -120,9 +125,7 @@ class _LoginPageState extends State<LoginPage> {
                 obscureText: !_passwordVisible,
                 decoration: InputDecoration(
                   hintText: 'Password',
-                  hintStyle: TextStyle(
-                    fontSize: 15,
-                  ),
+                  hintStyle: TextStyle(fontSize: 15),
                   filled: true,
                   fillColor: Colors.grey.shade100,
                   border: OutlineInputBorder(
@@ -160,8 +163,10 @@ class _LoginPageState extends State<LoginPage> {
                 style: ElevatedButton.styleFrom(
                   elevation: 2.5,
                   backgroundColor: const Color(0xFF1B6C07),
-                  padding: const EdgeInsets.symmetric(horizontal: 22.0,
-                    vertical: 13.0),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 22.0,
+                    vertical: 13.0,
+                  ),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12.0),
                   ),
