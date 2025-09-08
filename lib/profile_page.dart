@@ -3,9 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-
-
 import 'dart:io';
+import 'dart:convert';
 import 'login_page.dart';
 
 class ProfilePage extends StatefulWidget {
@@ -17,9 +16,12 @@ class ProfilePage extends StatefulWidget {
 
 class _ProfilePageState extends State<ProfilePage> {
   File? _image;
-  String? _profileImageUrl;
+  String? _profileImageUrl; // Can be URL or Base64
   String? _displayName;
-  final user =FirebaseAuth.instance.currentUser;
+  final user = FirebaseAuth.instance.currentUser;
+
+  /// Toggle for free-tier testing (Base64) vs production (Storage URL)
+  final bool useBase64ForTesting = true;
 
   @override
   void initState() {
@@ -27,75 +29,96 @@ class _ProfilePageState extends State<ProfilePage> {
     _loadUserProfile();
   }
 
-  Future<void> _loadUserProfile() async {
-    if (user==null) return;
+  // Helper getter for CircleAvatar image
+  ImageProvider? get profileImageProvider {
+    if (_image != null) return FileImage(_image!);
+    if (_profileImageUrl == null) return null;
+    return useBase64ForTesting
+        ? Image.memory(base64Decode(_profileImageUrl!)).image
+        : NetworkImage(_profileImageUrl!);
+  }
 
-    final doc = await FirebaseFirestore.instance.collection("users").doc(user!.uid).get();
-    if (doc.exists && doc.data()!["profileImage"] != null) {
+  // Helper method for showing SnackBars
+  void showSnack(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  }
+
+  Future<void> _loadUserProfile() async {
+    if (user == null) return;
+
+    final doc = await FirebaseFirestore.instance
+        .collection("users")
+        .doc(user!.uid)
+        .get();
+
+    if (doc.exists) {
       final data = doc.data()!;
       setState(() {
-        _profileImageUrl = data["profileImage"];
-        _displayName = data["name"];
+        _profileImageUrl = (data["profileImage"] as String?)?.isNotEmpty == true
+            ? data["profileImage"]
+            : null;
+        _displayName = data["name"] as String?;
       });
     }
   }
-
 
   Future<void> _pickImage() async {
     final picker = ImagePicker();
     final pickedFile = await picker.pickImage(source: ImageSource.gallery);
 
     if (pickedFile != null) {
-      setState(() {
-        _image = File(pickedFile.path);
-      });
-      await _uploadImageToFirestore();
+      setState(() => _image = File(pickedFile.path));
+      await _uploadImage();
     }
   }
 
-  Future<void> _uploadImageToFirestore() async {
+  Future<void> _uploadImage() async {
     if (_image == null || user == null) return;
 
     try {
-      final storageRef = FirebaseStorage.instance
-          .ref()
-          .child("profile_images")
-          .child("${user!.uid}.jpg");
+      String? imageToSave;
 
-      await storageRef.putFile(_image!);
+      if (useBase64ForTesting) {
+        final bytes = await _image!.readAsBytes();
+        imageToSave = base64Encode(bytes);
+      } else {
+        final storageRef = FirebaseStorage.instance
+            .ref()
+            .child("profile_images")
+            .child("${user!.uid}.jpg");
 
-      final downloadUrl = await storageRef.getDownloadURL();
+        final uploadTask = await storageRef.putFile(_image!);
 
+        if (uploadTask.state == TaskState.success) {
+          imageToSave = await storageRef.getDownloadURL();
+        } else {
+          throw "Upload failed";
+        }
+      }
+
+      // Save to Firestore
       await FirebaseFirestore.instance.collection("users").doc(user!.uid).set({
-        "email": user!.email,
-        "profileImage": downloadUrl,
-        "name": user!.displayName ?? "name",
+        "profileImage": imageToSave,
+        "name": _displayName ?? user!.displayName ?? "User Name",
       }, SetOptions(merge: true));
 
-      setState(() {
-        _profileImageUrl = downloadUrl;
-      });
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Profile image updated!")),
-      );
+      setState(() => _profileImageUrl = imageToSave);
+      showSnack("Profile image updated!");
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error: $e")),
-      );
+      showSnack("Error uploading image: $e");
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF1B6C07), // Green background
+      backgroundColor: const Color(0xFF1B6C07),
       body: Column(
-        children: <Widget>[
-          // Green header with profile info
+        children: [
+          // Header
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 30.0),
+            padding: const EdgeInsets.symmetric(vertical: 30),
             child: Column(
               children: [
                 const SizedBox(height: 70),
@@ -104,17 +127,19 @@ class _ProfilePageState extends State<ProfilePage> {
                   child: CircleAvatar(
                     radius: 63,
                     backgroundColor: Colors.white,
-                    backgroundImage: _image != null
-                        ? FileImage(_image!)
-                        : (_profileImageUrl != null ? NetworkImage(_profileImageUrl!) as ImageProvider : null),
-                    child: (_image == null && _profileImageUrl == null)
-                        ? const Icon(Icons.person, size: 87, color: Color(0xFF1B6C07))
+                    backgroundImage: profileImageProvider,
+                    child: profileImageProvider == null
+                        ? const Icon(
+                            Icons.person,
+                            size: 87,
+                            color: Color(0xFF1B6C07),
+                          )
                         : null,
                   ),
                 ),
                 const SizedBox(height: 15),
                 Text(
-                  _displayName ?? user?.displayName ?? 'User Name',
+                  _displayName ?? 'User Name',
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 20,
@@ -124,16 +149,13 @@ class _ProfilePageState extends State<ProfilePage> {
                 const SizedBox(height: 5),
                 Text(
                   user?.email ?? 'email',
-                  style: const TextStyle(
-                    color: Colors.white70,
-                    fontSize: 14,
-                  ),
+                  style: const TextStyle(color: Colors.white70, fontSize: 14),
                 ),
               ],
             ),
           ),
 
-          // White rounded section
+          // White section
           Expanded(
             child: Container(
               decoration: const BoxDecoration(
@@ -144,16 +166,25 @@ class _ProfilePageState extends State<ProfilePage> {
                 ),
               ),
               child: ListView(
-                padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 30.0),
-                children: <Widget>[
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 30,
+                ),
+                children: [
                   ListTile(
-                    leading: const Icon(Icons.person_outline, color: Color(0xFF1B6C07)),
+                    leading: const Icon(
+                      Icons.person_outline,
+                      color: Color(0xFF1B6C07),
+                    ),
                     title: const Text('Profile'),
                     onTap: () {},
                   ),
                   const Divider(),
                   ListTile(
-                    leading: const Icon(Icons.vpn_key_outlined, color: Color(0xFF1B6C07)),
+                    leading: const Icon(
+                      Icons.vpn_key_outlined,
+                      color: Color(0xFF1B6C07),
+                    ),
                     title: const Text('Change Password'),
                     onTap: () {},
                   ),
@@ -165,7 +196,9 @@ class _ProfilePageState extends State<ProfilePage> {
                       await FirebaseAuth.instance.signOut();
                       Navigator.pushReplacement(
                         context,
-                        MaterialPageRoute(builder: (context) => const LoginPage()),
+                        MaterialPageRoute(
+                          builder: (context) => const LoginPage(),
+                        ),
                       );
                     },
                   ),
