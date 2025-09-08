@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "720193850695",
+    "project_id": "delivery-f8e93",
+    "storage_bucket": "delivery-f8e93.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:720193850695:android:94fbec6d825d9686941062",
+        "android_client_info": {
+          "package_name": "my.edu.tarumt.delivery"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD01fuOOc2sGJjGZyzKWj2xuDj8Z3oCThE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
