@@ -1,46 +1,65 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:delivery/profile_page.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:delivery/profile_page.dart';
 
-final List<Map<String, String>> deliveries = [
-  {
-    'image': 'https://via.placeholder.com/60x60.png?text=Oil',
-    'status': 'On-Going',
-    'code': 'MSN 10001',
-    'date': '27 July, 2025',
-    'time': '3:00 PM',
-    'address':
-    '29, Jalan P. Ramlee, Taman P. Ramlee, 10460 George Town, Pulau Pinang',
-  },
-  {
-    'image': 'https://via.placeholder.com/60x60.png?text=Parts',
-    'status': 'On-Going',
-    'code': 'MSN 10002',
-    'date': '28 July, 2025',
-    'time': '11:00 AM',
-    'address':
-    '88, Jalan Burma, George Town, 10050 George Town, Pulau Pinang',
-  },
-  {
-    'image': 'https://via.placeholder.com/60x60.png?text=Oil',
-    'status': 'Delivered',
-    'code': 'MSN 10003',
-    'date': '25 July, 2025',
-    'time': '4:45 PM',
-    'address':
-    '21, Lebuh Acheh, George Town, 10300 George Town, Pulau Pinang',
-  },
-  {
-    'image': 'https://via.placeholder.com/60x60.png?text=Oil',
-    'status': 'New Order',
-    'code': 'MSN 10011',
-    'date': '27 July, 2025',
-    'time': '3:00 PM',
-    'address':
-    '30, Jalan P. Ramlee, Taman P. Ramlee, 10460 George Town, Pulau Pinang',
-  },
-];
+class Delivery {
+  final String code;
+  final String address;
+  final DateTime date;
+  final String status;
+  final List<Map<String, dynamic>> items;
+
+  Delivery({
+    required this.code,
+    required this.address,
+    required this.date,
+    required this.status,
+    required this.items,
+  });
+
+  factory Delivery.fromDoc(DocumentSnapshot doc) {
+    final data = doc.data() as Map<String, dynamic>;
+    return Delivery(
+      code: doc.id,
+      address: data['address'] ?? '',
+      date: (data['deliveryDate'] as Timestamp).toDate().toLocal(),
+      status: data['status'] ?? 'New Order',
+      items: List<Map<String,dynamic>>.from(data['deliveryItems'] ?? []),
+    );
+  }
+}
+
+Future<String?> fetchEmployeeCode() async {
+  final user = FirebaseAuth.instance.currentUser;
+  if (user == null) return null;
+
+  final userDoc = await FirebaseFirestore.instance
+      .collection('users')
+      .doc(user.uid) // Firebase UID must match user doc ID
+      .get();
+
+  return userDoc.data()?['employeeID'];
+}
+
+Stream<List<Delivery>> fetchEmployeeDeliveries() async* {
+  final employeeCode = await fetchEmployeeCode();
+  if (employeeCode == null) {
+    yield [];
+    return;
+  }
+
+  yield* FirebaseFirestore.instance
+      .collection('delivery')
+      .where('employeeID', isEqualTo: employeeCode)
+      .snapshots()
+      .map((snapshot) =>
+      snapshot.docs.map((doc) => Delivery.fromDoc(doc)).toList());
+}
+
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -50,15 +69,19 @@ class HomePage extends StatefulWidget {
 
 class _HomePageStatus extends State<HomePage> {
   int _selectedIndex = 1;
-  late List<Map<String, String>> finished;
   late List<Widget> _pages;
 
   @override
   void initState() {
     super.initState();
-    finished = deliveries.where((d) => d['status'] == 'Delivered').toList();
+    FirebaseFirestore.instance.collection('delivery').get().then((snapshot) {
+      print("Total docs: ${snapshot.docs.length}");
+      for (var doc in snapshot.docs) {
+        print(doc.data());
+      }
+    });
     _pages = [
-      DeliveryHistory(deliveries: finished),
+      DeliveryHistory(),
       const DeliveryListPage(),
       const ProfilePage(),
     ];
@@ -112,10 +135,6 @@ class DeliveryListPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final newOrder = deliveries.where((d) => d['status'] == 'New Order').toList();
-    final ongoing = deliveries.where((d) => d['status'] == 'On-Going').toList();
-    final finished = deliveries.where((d) => d['status'] == 'Delivered').toList();
-
     return DefaultTabController(
       length: 3,
       child: Scaffold(
@@ -124,8 +143,9 @@ class DeliveryListPage extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Header
               Padding(
-                padding: EdgeInsets.fromLTRB(25, 20, 18, 10),
+                padding: const EdgeInsets.fromLTRB(25, 20, 18, 10),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -165,7 +185,7 @@ class DeliveryListPage extends StatelessWidget {
 
               Align(
                 alignment: Alignment.center,
-                child: TabBar(
+                child: const TabBar(
                   labelColor: Color(0xFF1B6C07),
                   unselectedLabelColor: Colors.grey,
                   labelStyle: TextStyle(
@@ -182,16 +202,46 @@ class DeliveryListPage extends StatelessWidget {
                   ],
                 ),
               ),
-
               const SizedBox(height: 13),
+
               // Tab Content
               Expanded(
-                child: TabBarView(
-                  children: [
-                    DeliveryListTab(deliveries: newOrder),
-                    DeliveryListTab(deliveries: ongoing),
-                    DeliveryListTab(deliveries: finished),
-                  ],
+                child: StreamBuilder<List<Delivery>>(
+                  stream: fetchEmployeeDeliveries(),
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+                    if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                      return const Center(child: Text("No deliveries assigned"));
+                    }
+
+                    final deliveries = snapshot.data!;
+                    final newOrder = deliveries.where((d) => d.status == 'New Order').toList();
+                    final ongoing = deliveries.where((d) => d.status == 'On-Going').toList();
+                    final finished = deliveries.where((d) => d.status == 'Delivered').toList();
+                    final dateFormat = DateFormat('dd/MM/yyyy');
+                    final timeFormat = DateFormat('HH:mm');
+
+                    List<Map<String,String>> mapList(List<Delivery> list) => list.map((d) => {
+                      'code': d.code,
+                      'address': d.address,
+                      'date': dateFormat.format(d.date),
+                      'time': timeFormat.format(d.date),
+                      'status': d.status,
+                      'image': d.items.isNotEmpty
+                          ? (d.items.first['imageUrl']?.toString() ?? 'assets/images/EngineOils.jpg')
+                          : 'assets/images/EngineOils.jpg',
+                    }).toList();
+
+                    return TabBarView(
+                      children: [
+                        DeliveryListTab(deliveries: mapList(newOrder)),
+                        DeliveryListTab(deliveries: mapList(ongoing)),
+                        DeliveryListTab(deliveries: mapList(finished)),
+                      ],
+                    );
+                  },
                 ),
               ),
             ],
@@ -425,12 +475,12 @@ class DeliveryDetailsPopUp extends StatelessWidget {
               ClipRRect(
                 borderRadius: BorderRadius.circular(10),
                 child: SizedBox(
-                  height:180,
-                  width:double.infinity,
-                  child:Container(
-                    height: 180,
-                    child: Image.asset('assets/images/map.jpeg',width: 100,),
-                  )
+                    height:180,
+                    width:double.infinity,
+                    child:Container(
+                      height: 180,
+                      child: Image.asset('assets/images/map.jpeg',width: 100,),
+                    )
                 ),
               ),
               SizedBox(height:12),
@@ -575,75 +625,50 @@ class DeliveryDetailsPopUp extends StatelessWidget {
 }
 
 class DeliveryHistory extends StatelessWidget {
-  final List<Map<String, String>> deliveries;
-  const DeliveryHistory({super.key,required this.deliveries});
+  const DeliveryHistory({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      body: SafeArea(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Padding(
-                padding: EdgeInsets.fromLTRB(25, 20, 18, 10),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text('Delivery History',
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF1B6C07),
-                      ),
-                    ),
-                    Container(
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.2),
-                            spreadRadius: 1,
-                            blurRadius: 2,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                      child: CircleAvatar(
-                        radius: 22,
-                        backgroundColor: Colors.white,
-                        child: Icon(Icons.person,color: Color(0xFF1B6C07),size:27,
-                        ),
-                      ),
-                    )
-                  ],
-                ),
+    return StreamBuilder<List<Delivery>>(
+      stream: fetchEmployeeDeliveries(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (!snapshot.hasData || snapshot.data!.isEmpty) {
+          return const Center(child: Text("No delivery history"));
+        }
+
+        final delivered = snapshot.data!.where((d) => d.status == 'Delivered').toList();
+        final mapList = delivered.map((d) => {
+          'code': d.code,
+          'address': d.address,
+          'date': "${d.date.day}/${d.date.month}/${d.date.year}",
+          'time': "${d.date.hour}:${d.date.minute.toString().padLeft(2,'0')}",
+          'status': d.status,
+          'image': d.items.isNotEmpty ? d.items.first['imageUrl'] ?? 'assets/images/EngineOils.jpg' : 'assets/images/EngineOils.jpg',
+        }).toList();
+
+        return ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: mapList.length,
+          itemBuilder: (context, index) {
+            final d = mapList[index];
+            return Padding(
+              padding: const EdgeInsets.fromLTRB(7,0,7,16),
+              child: deliveryCard(
+                context: context,
+                image: d['image']!,
+                status: d['status']!,
+                code: d['code']!,
+                date: d['date']!,
+                time: d['time']!,
+                address: d['address']!,
               ),
-              Expanded(
-                child: ListView.builder(
-                  padding: EdgeInsets.all(16),
-                  itemCount: deliveries.length,
-                  itemBuilder: (context, index) {
-                    final d = deliveries[index];
-                    return Padding(
-                      padding: EdgeInsets.fromLTRB(7, 0, 7, 16),
-                      child: deliveryCard(
-                        context: context,
-                        image: d['image']!,
-                        status: d['status']!,
-                        code: d['code']!,
-                        date: d['date']!,
-                        time: d['time']!,
-                        address: d['address']!,
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ],
-          )
-      ),
+            );
+          },
+        );
+      },
     );
   }
 }
