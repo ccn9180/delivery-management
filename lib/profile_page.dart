@@ -5,6 +5,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:io';
 import 'dart:convert';
+import 'changepassword.dart';
 import 'login_page.dart';
 
 class ProfilePage extends StatefulWidget {
@@ -186,7 +187,12 @@ class _ProfilePageState extends State<ProfilePage> {
                       color: Color(0xFF1B6C07),
                     ),
                     title: const Text('Change Password'),
-                    onTap: () {},
+                    onTap: () {
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => const ChangePasswordPage()),
+                      );
+                    },
                   ),
                   const Divider(),
                   ListTile(
