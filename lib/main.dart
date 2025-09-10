@@ -5,6 +5,7 @@ import 'firebase_options.dart';
 import 'homepage.dart';
 import 'login_page.dart';
 
+
 class Wrapper extends StatelessWidget {
   const Wrapper({super.key});
 
@@ -13,16 +14,15 @@ class Wrapper extends StatelessWidget {
     return StreamBuilder<User?>(
       stream: FirebaseAuth.instance.authStateChanges(),
       builder: (context, snapshot) {
-        // User is logged in
         if (snapshot.hasData) {
-          return const HomePage();
+          return const HomePage();  // user logged in
         }
-        // User is not logged in
-        return const LoginPage();
+        return const LoginPage();   // user not logged in
       },
     );
   }
 }
+
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();

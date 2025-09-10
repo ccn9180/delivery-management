@@ -1,16 +1,17 @@
 import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:delivery/firebase_options.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:flutter/src/material/colors.dart';
-
-
+import 'package:intl/intl.dart';
 
 void main() async{
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp();
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
   runApp(const MyApp());
 }
 
@@ -30,10 +31,7 @@ class DeliveryPersonnel{
 
 class Recipient{
   final String name;
-  final String emai
-
-
-  l;
+  final String email;
   final String location;
 
   Recipient({required this.name, required this.email, required this.location});
@@ -45,7 +43,7 @@ class Recipient{
   );
 }
 
-class DeliveryItem{
+class DeliveryItem {
   final String item;
   final int qty;
   final String tracking;
@@ -60,19 +58,42 @@ class DeliveryItem{
     required this.time,
   });
 
-  factory DeliveryItem.fromMap(Map<String, dynamic> m) => DeliveryItem(
-    item: m['item'] ?? '',
-    qty: m['qty'] ?? '',
-    tracking: m['tracking'] ?? '',
-    date: m['date'] ?? '',
-    time: m['time'] ?? '',
-  );
+  factory DeliveryItem.fromMap(Map<String, dynamic> m) {
+    String formattedDate = '';
+    String formattedTime = '';
+
+    if (m['date'] != null) {
+      if (m['date'] is Timestamp) {
+        final dt = (m['date'] as Timestamp).toDate();
+        formattedDate = DateFormat('yyyy-MM-dd').format(dt);
+      } else {
+        formattedDate = m['date'].toString();
+      }
+    }
+
+    if (m['time'] != null) {
+      if (m['time'] is Timestamp) {
+        final dt = (m['time'] as Timestamp).toDate();
+        formattedTime = DateFormat('HH:mm').format(dt);
+      } else {
+        formattedTime = m['time'].toString();
+      }
+    }
+
+    return DeliveryItem(
+      item: m['item'] ?? '',
+      qty: (m['qty'] is int) ? m['qty'] : int.tryParse(m['qty'].toString()) ?? 0,
+      tracking: m['tracking'] ?? '',
+      date: formattedDate,
+      time: formattedTime,
+    );
+  }
 }
+
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -109,13 +130,29 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   Future<void> _fetchFromFirestore() async{
-    final personnelDoc = await FirebaseFirestore.instance.collection('delivery_personnel').doc('personnel').get();
-    final recipientDoc = await FirebaseFirestore.instance.collection('recipients').doc('workshop1').get();
-    final itemsSnapshot = await FirebaseFirestore.instance.collection('deliveries').doc('delivery123').collection('items').get();
+    try{
+      final personnelDoc = await FirebaseFirestore.instance
+          .collection('delivery_personnel')
+          .doc('personnel')
+          .get();
 
-    deliveryPersonnel = DeliveryPersonnel.fromMap(personnelDoc.data()!);
-    recipient = Recipient.fromMap(recipientDoc.data()!);
-    deliveryItems = itemsSnapshot.docs.map((d) => DeliveryItem.fromMap(d.data())).toList();
+      final recipientDoc = await FirebaseFirestore.instance
+          .collection('recipients')
+          .doc('workshop1')
+          .get();
+
+      final itemsSnapshot = await FirebaseFirestore.instance
+          .collection('deliveries')
+          .doc('delivery123')
+          .collection('items')
+          .get();
+
+      deliveryPersonnel = DeliveryPersonnel.fromMap(personnelDoc.data() ?? {});
+      recipient = Recipient.fromMap(recipientDoc.data() ?? {});
+      deliveryItems = itemsSnapshot.docs.map((d) => DeliveryItem.fromMap(d.data())).toList();
+    } catch (e) {
+      debugPrint("Error fetching Firestore data: $e");
+    }
   }
 
   File? _imageFile;
@@ -209,7 +246,7 @@ class _MyHomePageState extends State<MyHomePage> {
                 children: [
                   const SizedBox(height: 5),
                   Text(
-                    'Date: November 7, 2025 - 3:15 PM',
+                    'Date: ${deliveryItems.isNotEmpty ? "${deliveryItems.first.date} - ${deliveryItems.first.time}" : "N/A"}',
                     style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 5),
@@ -256,7 +293,7 @@ class _MyHomePageState extends State<MyHomePage> {
                   const SizedBox(height: 20,)
                 ],
               ),
-            )
+            );
           }
       ),
     );

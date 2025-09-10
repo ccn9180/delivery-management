@@ -105,6 +105,15 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
   }
 
   @override
+  void dispose() {
+    // TODO: implement dispose
+    _oldPasswordController.dispose();
+    _newPasswordController.dispose();
+    _confirmPasswordController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
