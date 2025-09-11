@@ -8,6 +8,22 @@ import 'dart:convert';
 import 'changepassword.dart';
 import 'login_page.dart';
 
+Future<void> sendChangePasswordEmailLink(String email) async {
+  ActionCodeSettings actionCodeSettings = ActionCodeSettings(
+    url: 'https://deliveryf8e93.page.link/change-password', // Dynamic Link
+    handleCodeInApp: true,
+    iOSBundleId: 'com.example.ios',
+    androidPackageName: 'com.example.android',
+    androidInstallApp: true,
+    androidMinimumVersion: '21',
+  );
+
+  await FirebaseAuth.instance.sendSignInLinkToEmail(
+      email: email,
+      actionCodeSettings: actionCodeSettings
+  );
+}
+
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
 
@@ -131,10 +147,10 @@ class _ProfilePageState extends State<ProfilePage> {
                     backgroundImage: profileImageProvider,
                     child: profileImageProvider == null
                         ? const Icon(
-                            Icons.person,
-                            size: 87,
-                            color: Color(0xFF1B6C07),
-                          )
+                      Icons.person,
+                      size: 87,
+                      color: Color(0xFF1B6C07),
+                    )
                         : null,
                   ),
                 ),
@@ -189,8 +205,8 @@ class _ProfilePageState extends State<ProfilePage> {
                     title: const Text('Change Password'),
                     onTap: () {
                       Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (context) => const ChangePasswordPage()),
+                        context,
+                        MaterialPageRoute(builder: (context) => const ChangePasswordPage()),
                       );
                     },
                   ),

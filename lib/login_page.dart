@@ -27,9 +27,9 @@ class _LoginPageState extends State<LoginPage> {
       // Firebase login
       UserCredential userCredential = await FirebaseAuth.instance
           .signInWithEmailAndPassword(
-            email: _emailController.text.trim(),
-            password: _passwordController.text.trim(),
-          );
+        email: _emailController.text.trim(),
+        password: _passwordController.text.trim(),
+      );
 
       // Success
       print("Login successfully: ${userCredential.user!.email}");
