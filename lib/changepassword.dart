@@ -94,8 +94,8 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
           borderSide: const BorderSide(color: Colors.red, width: 2),
         ),
         focusedErrorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Colors.red, width: 2)
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: Colors.red, width: 2)
         ),
         contentPadding:
         const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
