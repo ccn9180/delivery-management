@@ -4,6 +4,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'homepage.dart';
 import 'login_page.dart';
+import 'google_map.dart';
 
 
 class Wrapper extends StatelessWidget {
