@@ -227,7 +227,7 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
           child: Container(
             padding: const EdgeInsets.all(16),
             decoration: const BoxDecoration(
-              color: Colors.green,
+              color: Color(0xFF1B6C07),
               borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
             ),
             child: Column(

@@ -29,7 +29,7 @@ class Delivery {
       address: data['address'] ?? '',
       date: (data['deliveryDate'] as Timestamp).toDate().toLocal(),
       status: data['status'] ?? 'New Order',
-      items: List<Map<String,dynamic>>.from(data['deliveryItems'] ?? []),
+      items: List<Map<String, dynamic>>.from(data['deliveryItems'] ?? []),
     );
   }
 }
@@ -57,10 +57,11 @@ Stream<List<Delivery>> fetchEmployeeDeliveries() async* {
       .collection('delivery')
       .where('employeeID', isEqualTo: employeeCode)
       .snapshots()
-      .map((snapshot) =>
-      snapshot.docs.map((doc) => Delivery.fromDoc(doc)).toList());
+      .map(
+        (snapshot) =>
+            snapshot.docs.map((doc) => Delivery.fromDoc(doc)).toList(),
+      );
 }
-
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -81,11 +82,7 @@ class _HomePageStatus extends State<HomePage> {
         print(doc.data());
       }
     });
-    _pages = [
-      DeliveryHistory(),
-      const DeliveryListPage(),
-      const ProfilePage(),
-    ];
+    _pages = [DeliveryHistory(), const DeliveryListPage(), const ProfilePage()];
   }
 
   @override
@@ -133,7 +130,6 @@ class _HomePageStatus extends State<HomePage> {
 
 class DeliveryListPage extends StatelessWidget {
   const DeliveryListPage({super.key});
-
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
@@ -214,26 +210,40 @@ class DeliveryListPage extends StatelessWidget {
                       return const Center(child: CircularProgressIndicator());
                     }
                     if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                      return const Center(child: Text("No deliveries assigned"));
+                      return const Center(
+                        child: Text("No deliveries assigned"),
+                      );
                     }
 
                     final deliveries = snapshot.data!;
-                    final newOrder = deliveries.where((d) => d.status == 'New Order').toList();
-                    final ongoing = deliveries.where((d) => d.status == 'On-Going').toList();
-                    final finished = deliveries.where((d) => d.status == 'Delivered').toList();
+                    final newOrder = deliveries
+                        .where((d) => d.status == 'New Order')
+                        .toList();
+                    final ongoing = deliveries
+                        .where((d) => d.status == 'On-Going')
+                        .toList();
+                    final finished = deliveries
+                        .where((d) => d.status == 'Delivered')
+                        .toList();
                     final dateFormat = DateFormat('dd/MM/yyyy');
                     final timeFormat = DateFormat('HH:mm');
 
-                    List<Map<String,String>> mapList(List<Delivery> list) => list.map((d) => {
-                      'code': d.code,
-                      'address': d.address,
-                      'date': dateFormat.format(d.date),
-                      'time': timeFormat.format(d.date),
-                      'status': d.status,
-                      'image': d.items.isNotEmpty
-                          ? (d.items.first['imageUrl']?.toString() ?? 'assets/images/EngineOils.jpg')
-                          : 'assets/images/EngineOils.jpg',
-                    }).toList();
+                    List<Map<String, String>> mapList(List<Delivery> list) =>
+                        list
+                            .map(
+                              (d) => {
+                                'code': d.code,
+                                'address': d.address,
+                                'date': dateFormat.format(d.date),
+                                'time': timeFormat.format(d.date),
+                                'status': d.status,
+                                'image': d.items.isNotEmpty
+                                    ? (d.items.first['imageUrl']?.toString() ??
+                                          'assets/images/EngineOils.jpg')
+                                    : 'assets/images/EngineOils.jpg',
+                              },
+                            )
+                            .toList();
 
                     return TabBarView(
                       children: [
@@ -291,7 +301,18 @@ Widget deliveryCard({
   required String status,
 }) {
   return GestureDetector(
-    onTap: () {
+    onTap: () async {
+      final doc = await FirebaseFirestore.instance
+          .collection('delivery')
+          .doc(code)
+          .get();
+
+      if (!doc.exists) return;
+
+      final data = doc.data() as Map<String, dynamic>;
+      final List<Map<String, dynamic>> deliveryItems =
+          List<Map<String, dynamic>>.from(data['deliveryItems'] ?? []);
+
       showGeneralDialog(
         context: context,
         barrierDismissible: true,
@@ -303,8 +324,8 @@ Widget deliveryCard({
             child: DeliveryDetailsPopUp(
               code: code,
               address: address,
-              image: image,
               status: status,
+              items: deliveryItems,
             ),
           );
         },
@@ -342,11 +363,75 @@ Widget deliveryCard({
                   ),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(8),
-                    child: Image.asset(
-                      'assets/images/EngineOils.jpg',
-                      width: 60,
-                      height: 60,
-                      fit: BoxFit.cover,
+                    child: FutureBuilder<DocumentSnapshot?>(
+                      future: FirebaseFirestore.instance
+                          .collection('delivery')
+                          .doc(code)
+                          .get()
+                          .then((doc) async {
+                            if (!doc.exists) return null;
+
+                            final data = doc.data() as Map<String, dynamic>;
+                            final items = List<Map<String, dynamic>>.from(
+                              data['deliveryItems'] ?? [],
+                            );
+
+                            if (items.isEmpty) return null;
+
+                            final firstItemId = items.first['itemID'];
+                            return FirebaseFirestore.instance
+                                .collection('items')
+                                .doc(firstItemId)
+                                .get();
+                          }),
+                      builder: (context, snapshot) {
+                        if (snapshot.connectionState ==
+                            ConnectionState.waiting) {
+                          return const SizedBox(
+                            width: 60,
+                            height: 60,
+                            child: Center(
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          );
+                        }
+
+                        // Handle null or non-existing doc
+                        if (!snapshot.hasData ||
+                            snapshot.data == null ||
+                            !snapshot.data!.exists) {
+                          return Image.asset(
+                            'assets/images/EngineOils.jpg',
+                            width: 60,
+                            height: 60,
+                            fit: BoxFit.cover,
+                          );
+                        }
+
+                        final data =
+                            snapshot.data!.data() as Map<String, dynamic>;
+                        final imageUrl = data['imageUrl'] ?? '';
+
+                        return imageUrl.isNotEmpty
+                            ? Image.network(
+                                imageUrl,
+                                width: 60,
+                                height: 60,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) => Image.asset(
+                                  'assets/images/EngineOils.jpg',
+                                  width: 60,
+                                  height: 60,
+                                  fit: BoxFit.cover,
+                                ),
+                              )
+                            : Image.asset(
+                                'assets/images/EngineOils.jpg',
+                                width: 60,
+                                height: 60,
+                                fit: BoxFit.cover,
+                              );
+                      },
                     ),
                   ),
                 ),
@@ -435,15 +520,15 @@ Widget deliveryCard({
 class DeliveryDetailsPopUp extends StatelessWidget {
   final String code;
   final String address;
-  final String image;
   final String status;
+  final List<Map<String, dynamic>> items;
 
   const DeliveryDetailsPopUp({
     super.key,
     required this.code,
     required this.address,
-    required this.image,
     required this.status,
+    required this.items,
   });
 
   @override
@@ -465,6 +550,7 @@ class DeliveryDetailsPopUp extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Delivery code
               Text(
                 '# $code',
                 style: const TextStyle(
@@ -472,19 +558,25 @@ class DeliveryDetailsPopUp extends StatelessWidget {
                   fontSize: 18,
                 ),
               ),
+
               const SizedBox(height: 10),
+
+              // Map placeholder
               ClipRRect(
                 borderRadius: BorderRadius.circular(10),
                 child: SizedBox(
-                    height:180,
-                    width:double.infinity,
-                    child:Container(
-                      height: 180,
-                      child: Image.asset('assets/images/map.jpeg',width: 100,),
-                    )
+                  height: 180,
+                  width: double.infinity,
+                  child: Image.asset(
+                    'assets/images/map.jpeg',
+                    fit: BoxFit.cover,
+                  ),
                 ),
               ),
-              SizedBox(height:12),
+
+              const SizedBox(height: 12),
+
+              // Address row
               Row(
                 children: [
                   const Icon(Icons.location_pin),
@@ -492,35 +584,105 @@ class DeliveryDetailsPopUp extends StatelessWidget {
                   Expanded(child: Text(address)),
                 ],
               ),
+
               const SizedBox(height: 20),
+
               const Text(
                 'Goods Detail',
                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
               ),
               const SizedBox(height: 10),
-              Row(
-                children: [
-                  Image.asset('assets/images/EngineOils.jpg', width: 50),
-                  const SizedBox(width: 10),
-                  Image.asset('assets/images/EngineOils.jpg', width: 50),
-                  const SizedBox(width: 10),
-                  Image.asset('assets/images/EngineOils.jpg', width: 50),
-                ],
+
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: items.map((item) {
+                    return FutureBuilder<DocumentSnapshot>(
+                      future: FirebaseFirestore.instance
+                          .collection('items')
+                          .doc(item['itemID'])
+                          .get(),
+                      builder: (context, snapshot) {
+                        if (!snapshot.hasData) {
+                          return const SizedBox();
+                        }
+                        final data =
+                            snapshot.data!.data() as Map<String, dynamic>?;
+
+                        final imageUrl = data?['imageUrl'] ?? '';
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              border: Border.all(color: Colors.grey.shade100, width: 1.5),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(6), // 👈 Match radius here
+                              child: imageUrl.isNotEmpty
+                                  ? Image.network(
+                                imageUrl,
+                                width: 50,
+                                height: 50,
+                                fit: BoxFit.cover,
+                              )
+                                  : Image.asset(
+                                'assets/images/EngineOils.jpg',
+                                width: 50,
+                                height: 50,
+                                fit: BoxFit.cover,
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    );
+                  }).toList(),
+                ),
               ),
+
               const SizedBox(height: 20),
-              const Text(
-                '• Part No: BOSCH 0986UR3204 | RM 30.00/Unit',
-                style: TextStyle(color: Colors.grey),
+
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: items.map((item) {
+                  return FutureBuilder<DocumentSnapshot>(
+                    future: FirebaseFirestore.instance
+                        .collection('items')
+                        .doc(item['itemID'])
+                        .get(),
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const Center(
+                          child: SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        );
+                      }
+
+                      if (!snapshot.hasData || !snapshot.data!.exists) {
+                        return const Text("Item not found");
+                      }
+
+                      final data =
+                          snapshot.data!.data() as Map<String, dynamic>;
+                      final name = data['itemName'] ?? 'Unknown';
+                      final price = (data['price'] ?? 0).toDouble();
+                      final qty = item['quantity'] ?? 0;
+
+                      return Text(
+                        '• $name | RM ${price.toStringAsFixed(2)} x $qty',
+                        style: const TextStyle(color: Colors.grey),
+                      );
+                    },
+                  );
+                }).toList(),
               ),
-              const Text(
-                '• Brake Pad BENDIX DB1242 GCT | RM 25.00',
-                style: TextStyle(color: Colors.grey),
-              ),
-              const Text(
-                '• Petronas Multi-Grade SAE 15W-50 API-SJ | RM 18.00',
-                style: TextStyle(color: Colors.grey),
-              ),
+
               const SizedBox(height: 20),
+
               Align(
                 alignment: Alignment.center,
                 child: Builder(
@@ -532,7 +694,7 @@ class DeliveryDetailsPopUp extends StatelessWidget {
                           ElevatedButton(
                             onPressed: () => Navigator.of(context).pop(),
                             style: ElevatedButton.styleFrom(
-                              padding: EdgeInsets.symmetric(
+                              padding: const EdgeInsets.symmetric(
                                 vertical: 5,
                                 horizontal: 38,
                               ),
@@ -541,7 +703,7 @@ class DeliveryDetailsPopUp extends StatelessWidget {
                                 borderRadius: BorderRadius.circular(7),
                               ),
                             ),
-                            child: Text(
+                            child: const Text(
                               'Cancel',
                               style: TextStyle(
                                 color: Colors.grey,
@@ -550,18 +712,24 @@ class DeliveryDetailsPopUp extends StatelessWidget {
                             ),
                           ),
                           ElevatedButton(
-                            onPressed: () => Navigator.of(context).pop(),
+                            onPressed: () {
+                              FirebaseFirestore.instance
+                                  .collection('delivery')
+                                  .doc(code)
+                                  .update({'status': 'On-Going'});
+                              Navigator.of(context).pop();
+                            },
                             style: ElevatedButton.styleFrom(
-                              padding: EdgeInsets.symmetric(
+                              padding: const EdgeInsets.symmetric(
                                 vertical: 5,
                                 horizontal: 30,
                               ),
-                              backgroundColor: Color(0xFF1B6C07),
+                              backgroundColor: const Color(0xFF1B6C07),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(7),
                               ),
                             ),
-                            child: Text(
+                            child: const Text(
                               'Accepted',
                               style: TextStyle(
                                 color: Colors.white,
@@ -574,24 +742,30 @@ class DeliveryDetailsPopUp extends StatelessWidget {
                     } else if (status == 'On-Going') {
                       return ElevatedButton(
                         onPressed: () {
+                          FirebaseFirestore.instance
+                              .collection('delivery')
+                              .doc(code)
+                              .update({'status': 'Delivered'});
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (context) => const GoogleMapPage(title: 'Delivery Live Map'),
+                              builder: (context) => const GoogleMapPage(
+                                title: 'Delivery Live Map',
+                              ),
                             ),
                           );
                         },
                         style: ElevatedButton.styleFrom(
-                          padding: EdgeInsets.symmetric(
+                          padding: const EdgeInsets.symmetric(
                             vertical: 5,
                             horizontal: 10,
                           ),
-                          backgroundColor: Color(0xFF1B6C07),
+                          backgroundColor: const Color(0xFF1B6C07),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(7),
                           ),
                         ),
-                        child: Text(
+                        child: const Text(
                           'Start Navigation',
                           style: TextStyle(
                             color: Colors.white,
@@ -603,16 +777,16 @@ class DeliveryDetailsPopUp extends StatelessWidget {
                       return ElevatedButton(
                         onPressed: () => Navigator.of(context).pop(),
                         style: ElevatedButton.styleFrom(
-                          padding: EdgeInsets.symmetric(
+                          padding: const EdgeInsets.symmetric(
                             vertical: 5,
                             horizontal: 30,
                           ),
-                          backgroundColor: Color(0xFF1B6C07),
+                          backgroundColor: const Color(0xFF1B6C07),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(7),
                           ),
                         ),
-                        child: Text(
+                        child: const Text(
                           'Back',
                           style: TextStyle(
                             color: Colors.white,
@@ -647,15 +821,25 @@ class DeliveryHistory extends StatelessWidget {
           return const Center(child: Text("No delivery history"));
         }
 
-        final delivered = snapshot.data!.where((d) => d.status == 'Delivered').toList();
-        final mapList = delivered.map((d) => {
-          'code': d.code,
-          'address': d.address,
-          'date': "${d.date.day}/${d.date.month}/${d.date.year}",
-          'time': "${d.date.hour}:${d.date.minute.toString().padLeft(2,'0')}",
-          'status': d.status,
-          'image': d.items.isNotEmpty ? d.items.first['imageUrl'] ?? 'assets/images/EngineOils.jpg' : 'assets/images/EngineOils.jpg',
-        }).toList();
+        final delivered = snapshot.data!
+            .where((d) => d.status == 'Delivered')
+            .toList();
+        final mapList = delivered
+            .map(
+              (d) => {
+                'code': d.code,
+                'address': d.address,
+                'date': "${d.date.day}/${d.date.month}/${d.date.year}",
+                'time':
+                    "${d.date.hour}:${d.date.minute.toString().padLeft(2, '0')}",
+                'status': d.status,
+                'image': d.items.isNotEmpty
+                    ? d.items.first['imageUrl'] ??
+                          'assets/images/EngineOils.jpg'
+                    : 'assets/images/EngineOils.jpg',
+              },
+            )
+            .toList();
 
         return ListView.builder(
           padding: const EdgeInsets.all(16),
@@ -663,7 +847,7 @@ class DeliveryHistory extends StatelessWidget {
           itemBuilder: (context, index) {
             final d = mapList[index];
             return Padding(
-              padding: const EdgeInsets.fromLTRB(7,0,7,16),
+              padding: const EdgeInsets.fromLTRB(7, 0, 7, 16),
               child: deliveryCard(
                 context: context,
                 image: d['image']!,
