@@ -30,7 +30,7 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null || user.email == null) {
-        _showSnack("No user logged in.");
+        _showSnack("No logged in.");
         return;
       }
 
