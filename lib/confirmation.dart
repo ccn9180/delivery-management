@@ -1,263 +1,230 @@
-import 'dart:io';
-
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
-import 'package:flutter/src/material/colors.dart';
 
+class ChangePasswordPage extends StatefulWidget {
+  const ChangePasswordPage({super.key});
 
-
-void main() async{
-  WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp();
-  runApp(const MyApp());
-}
-
-class DeliveryPersonnel{
-  final String name;
-  final String email;
-  final String company;
-
-  DeliveryPersonnel({required this.name, required this.email, required this.company});
-
-  factory DeliveryPersonnel.fromMap(Map<String,dynamic> m) => DeliveryPersonnel(
-    name: m['name'] ?? '',
-    email: m['email'] ?? '',
-    company: m['company'] ?? '',
-  );
-}
-
-class Recipient{
-  final String name;
-  final String emai
-
-
-  l;
-  final String location;
-
-  Recipient({required this.name, required this.email, required this.location});
-
-  factory Recipient.fromMap(Map<String, dynamic> m) => Recipient(
-    name: m['name'] ?? '',
-    email: m['email'] ?? '',
-    location: m['location'] ?? '',
-  );
-}
-
-class DeliveryItem{
-  final String item;
-  final int qty;
-  final String tracking;
-  final String date;
-  final String time;
-
-  DeliveryItem({
-    required this.item,
-    required this.qty,
-    required this.tracking,
-    required this.date,
-    required this.time,
-  });
-
-  factory DeliveryItem.fromMap(Map<String, dynamic> m) => DeliveryItem(
-    item: m['item'] ?? '',
-    qty: m['qty'] ?? '',
-    tracking: m['tracking'] ?? '',
-    date: m['date'] ?? '',
-    time: m['time'] ?? '',
-  );
-}
-
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
-
-  // This widget is the root of your application.
   @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      title: 'Delivery Confirmation',
-      theme: ThemeData(
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.white),
-      ),
-      home: const MyHomePage(title: 'Delivery Confirmation'),
+  State<ChangePasswordPage> createState() => _ChangePasswordPageState();
+}
+
+class _ChangePasswordPageState extends State<ChangePasswordPage> {
+  final _formKey = GlobalKey<FormState>();
+  final _oldPasswordController = TextEditingController();
+  final _newPasswordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
+
+  bool _loading = false;
+
+  void _showSnack(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
     );
   }
-}
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
+  Future<void> _resetPassword() async {
+    if (!_formKey.currentState!.validate()) return;
 
-  final String title;
+    setState(() => _loading = true);
 
-  @override
-  State<MyHomePage> createState() => _MyHomePageState();
-}
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null || user.email == null) {
+        _showSnack("No user logged in.");
+        return;
+      }
 
-class _MyHomePageState extends State<MyHomePage> {
-  late Future<void> _loadData;
-  DeliveryPersonnel? deliveryPersonnel;
-  Recipient? recipient;
-  List<DeliveryItem> deliveryItems = [];
+      // Reauthenticate user
+      final cred = EmailAuthProvider.credential(
+        email: user.email!,
+        password: _oldPasswordController.text.trim(),
+      );
+      await user.reauthenticateWithCredential(cred);
 
-  @override
-  void initState() {
-    super.initState();
-    _loadData = _fetchFromFirestore();
-  }
+      // Update password
+      await user.updatePassword(_newPasswordController.text.trim());
 
-  Future<void> _fetchFromFirestore() async{
-    final personnelDoc = await FirebaseFirestore.instance.collection('delivery_personnel').doc('personnel').get();
-    final recipientDoc = await FirebaseFirestore.instance.collection('recipients').doc('workshop1').get();
-    final itemsSnapshot = await FirebaseFirestore.instance.collection('deliveries').doc('delivery123').collection('items').get();
-
-    deliveryPersonnel = DeliveryPersonnel.fromMap(personnelDoc.data()!);
-    recipient = Recipient.fromMap(recipientDoc.data()!);
-    deliveryItems = itemsSnapshot.docs.map((d) => DeliveryItem.fromMap(d.data())).toList();
-  }
-
-  File? _imageFile;
-  final ImagePicker _picker = ImagePicker();
-
-  Future<void> _takePhoto() async{
-    final XFile? pickedFile = await _picker.pickImage(source: ImageSource.camera);
-    if (pickedFile != null){
-      setState(() {
-        _imageFile = File(pickedFile.path);
-      });
+      _showSnack("Password updated successfully!");
+      Navigator.pop(context);
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'wrong-password') {
+        _showSnack("Old password is incorrect.");
+      } else {
+        _showSnack("Error: ${e.message}");
+      }
+    } catch (e) {
+      _showSnack("Error: $e");
+    } finally {
+      setState(() => _loading = false);
     }
   }
 
-
-  bool _isConfirmed = false;
-  bool _isCancelled = false;
-
-  void _handleCancel(){
-    setState(() {
-      _isCancelled = true;
-      _isConfirmed = false;
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Cancelled")),
+  Widget _fieldTitle(String title) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6, top: 20),
+      child: Text(
+        title,
+        style: const TextStyle(
+          fontWeight: FontWeight.w600,
+          fontSize: 16,
+        ),
+      ),
     );
   }
 
-  void _handleConfirm(){
-    setState(() {
-      _isConfirmed = true;
-      _isCancelled = false;
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Delivery Confirmed")),
+  Widget _textField(TextEditingController controller,
+      String? Function(String?) validator) {
+    return TextFormField(
+      controller: controller,
+      obscureText: true,
+      decoration: InputDecoration(
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Colors.grey),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Color(0xFF1B6C07), width: 2),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Colors.red, width: 2),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: Colors.red, width: 2)
+        ),
+        contentPadding:
+        const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+      ),
+      validator: validator,
     );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.white,
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
-        title: const Text(
-          'Delivery Confirmation',
-          style: TextStyle(color: Color(0xFF1B6C07), fontWeight: FontWeight.bold),
+        centerTitle: true,
+        toolbarHeight: 80,
+        leading: Padding(
+          padding: const EdgeInsets.all(12),
+          child: IconButton(
+            icon: const Icon(Icons.arrow_back, color: Colors.black),
+            onPressed: () => Navigator.pop(context),
+          ),
         ),
-        actions: [
-          Align(
-            alignment: Alignment.topRight,
-            child: Padding(
-              padding: const EdgeInsets.only(right: 16.0),
-              child: Container(
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Colors.white,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black12,
-                      blurRadius: 4,
-                      offset: Offset(2, 2),
-                    ),
-                  ],
-                ),
-                padding: const EdgeInsets.all(8.0),
-                child: Icon(
-                  Icons.person,
-                  color: Color(0xFF1B6D07),
-                  size: 30,
-                ),
-              ),
-            ),
-          )
-        ],
-      ),
-      body: FutureBuilder(
-          future: _loadData,
-          builder: (context,snapshot){
-            if(snapshot.connectionState != ConnectionState.done){
-              return const Center(child: CircularProgressIndicator());
-            }
-            if(deliveryPersonnel == null || recipient == null){
-              return const Center(child: Text('Failed to load data'));
-            }
 
-            return SingleChildScrollView(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const SizedBox(height: 5),
-                  Text(
-                    'Date: November 7, 2025 - 3:15 PM',
-                    style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 5),
-                  Text(
-                    "From: ${deliveryPersonnel!.name} | ${deliveryPersonnel!.company} | [${deliveryPersonnel!.email}]",
-                    style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 5),
-                  Text(
-                    "To: ${recipient!.name} | ${recipient!.location} | ${recipient!.email}",
-                    style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 20),
-                  Table(
-                    border: TableBorder.all(color: Colors.grey.shade300),
-                    columnWidths: const{
-                      0: FlexColumnWidth(2),
-                      1: FlexColumnWidth(1),
-                      2: FlexColumnWidth(2),
-                      3: FlexColumnWidth(2),
-                      4: FlexColumnWidth(1.5),
-                    },
-                    children: [
-                      const TableRow(
-                        children: [
-                          Padding(padding: EdgeInsets.all(8), child: Text('Item(s) Delivered', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold))),
-                          Padding(padding: EdgeInsets.all(8), child: Text('Quantity', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold))),
-                          Padding(padding: EdgeInsets.all(8), child: Text('Tracking Number', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold))),
-                          Padding(padding: EdgeInsets.all(8), child: Text('Delivery Date', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold))),
-                          Padding(padding: EdgeInsets.all(8), child: Text('Delivery Time', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold))),
-                        ],
-                      ),
-                      ...deliveryItems.map((item) => TableRow(
-                        children:[
-                          Padding(padding: EdgeInsets.all(8), child: Text(item.item, style: const TextStyle(fontSize: 10.5))),
-                          Padding(padding: EdgeInsets.all(8), child: Text(item.qty.toString(), style: const TextStyle(fontSize: 10.5))),
-                          Padding(padding: EdgeInsets.all(8), child: Text(item.tracking, style: const TextStyle(fontSize: 10.5))),
-                          Padding(padding: EdgeInsets.all(8), child: Text(item.date, style: const TextStyle(fontSize: 10.5))),
-                          Padding(padding: EdgeInsets.all(8), child: Text(item.time, style: const TextStyle(fontSize: 10.5))),
-                        ],
-                      )),
-                    ],
-                  ),
-                  const SizedBox(height: 20,)
-                ],
+        title: Padding(
+          padding: EdgeInsets.only(top: 12),
+          child: const Text(
+            "Change Password",
+            style: TextStyle(
+              color: Colors.black,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(30),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                "Choose a New Password",
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 16,
+                ),
               ),
-            )
-          }
+              const SizedBox(height: 4),
+              const Text(
+                "Enter and confirm your new password to regain access",
+                style: TextStyle(
+                  color: Colors.black54,
+                  fontSize: 12.5,
+                ),
+              ),
+
+              const SizedBox(height: 25,),
+
+              // Old Password
+              _fieldTitle("Old Password"),
+              _textField(
+                _oldPasswordController,
+                    (value) =>
+                value!.isEmpty ? "Enter your old password" : null,
+              ),
+
+              const SizedBox(height: 10,),
+
+              // New Password
+              _fieldTitle("New Password"),
+              _textField(
+                _newPasswordController,
+                    (value) {
+                  if (value == null || value.isEmpty) {
+                    return "Enter a new password";
+                  }
+                  if (value.length < 6) {
+                    return "Password must be at least 6 characters";
+                  }
+                  return null;
+                },
+              ),
+
+              const SizedBox(height: 10,),
+
+              // Confirm Password
+              _fieldTitle("Confirm New Password"),
+              _textField(
+                _confirmPasswordController,
+                    (value) {
+                  if (value != _newPasswordController.text) {
+                    return "Passwords do not match";
+                  }
+                  return null;
+                },
+              ),
+
+              const SizedBox(height: 150),
+
+              // Reset Password Button
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: ElevatedButton(
+                  onPressed: _loading ? null : _resetPassword,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF1B6C07),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  child: _loading
+                      ? const CircularProgressIndicator(color: Colors.white)
+                      : const Text(
+                    "Reset Password",
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
