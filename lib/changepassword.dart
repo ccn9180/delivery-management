@@ -151,7 +151,7 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
               const Text(
                 "Choose a New Password",
                 style: TextStyle(
-                  fontWeight: FontWeight.w600,
+                  fontWeight: FontWeight.bold,
                   fontSize: 16,
                 ),
               ),

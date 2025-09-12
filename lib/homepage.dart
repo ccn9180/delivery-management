@@ -1,10 +1,11 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:delivery/profile_page.dart';
+import 'package:delivery/widget/header.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:delivery/profile_page.dart';
+import 'DeliveryHistory.dart';
 import 'google_map.dart';
 
 class Delivery {
@@ -130,6 +131,7 @@ class _HomePageStatus extends State<HomePage> {
 
 class DeliveryListPage extends StatelessWidget {
   const DeliveryListPage({super.key});
+
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
@@ -138,77 +140,41 @@ class DeliveryListPage extends StatelessWidget {
         backgroundColor: Colors.white,
         body: SafeArea(
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Header
-              Padding(
-                padding: const EdgeInsets.fromLTRB(25, 20, 18, 10),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text(
-                      "Delivery List",
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF1B6C07),
-                      ),
-                    ),
-                    Container(
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.2),
-                            spreadRadius: 1,
-                            blurRadius: 2,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                      child: const CircleAvatar(
-                        radius: 22,
-                        backgroundColor: Colors.white,
-                        child: Icon(
-                          Icons.person,
-                          color: Color(0xFF1B6C07),
-                          size: 27,
-                        ),
-                      ),
-                    ),
-                  ],
+              const PageHeader(title: "Delivery List"),
+
+              // TabBar
+              const TabBar(
+                labelColor: Color(0xFF1B6C07),
+                unselectedLabelColor: Colors.grey,
+                labelStyle: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 15,
                 ),
+                indicatorColor: Color(0xFF1B6C07),
+                dividerColor: Colors.transparent,
+                indicatorWeight: 2,
+                tabs: [
+                  Tab(text: "New Order"),
+                  Tab(text: "On-Going"),
+                  Tab(text: "Delivered"),
+                ],
               ),
 
-              Align(
-                alignment: Alignment.center,
-                child: const TabBar(
-                  labelColor: Color(0xFF1B6C07),
-                  unselectedLabelColor: Colors.grey,
-                  labelStyle: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 15,
-                  ),
-                  indicatorColor: Color(0xFF1B6C07),
-                  dividerColor: Colors.transparent,
-                  indicatorWeight: 2,
-                  tabs: [
-                    Tab(text: "New Order"),
-                    Tab(text: "On-Going"),
-                    Tab(text: "Delivered"),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 13),
+              const SizedBox(height: 10),
 
-              // Tab Content
+              // TabBarView
               Expanded(
                 child: StreamBuilder<List<Delivery>>(
                   stream: fetchEmployeeDeliveries(),
                   builder: (context, snapshot) {
                     if (snapshot.connectionState == ConnectionState.waiting) {
-                      return const Center(child: CircularProgressIndicator());
+                      return const Center(
+                        child: CircularProgressIndicator(),
+                      );
                     }
+
                     if (!snapshot.hasData || snapshot.data!.isEmpty) {
                       return const Center(
                         child: Text("No deliveries assigned"),
@@ -225,6 +191,7 @@ class DeliveryListPage extends StatelessWidget {
                     final finished = deliveries
                         .where((d) => d.status == 'Delivered')
                         .toList();
+
                     final dateFormat = DateFormat('dd/MM/yyyy');
                     final timeFormat = DateFormat('HH:mm');
 
@@ -232,17 +199,17 @@ class DeliveryListPage extends StatelessWidget {
                         list
                             .map(
                               (d) => {
-                                'code': d.code,
-                                'address': d.address,
-                                'date': dateFormat.format(d.date),
-                                'time': timeFormat.format(d.date),
-                                'status': d.status,
-                                'image': d.items.isNotEmpty
-                                    ? (d.items.first['imageUrl']?.toString() ??
-                                          'assets/images/EngineOils.jpg')
-                                    : 'assets/images/EngineOils.jpg',
-                              },
-                            )
+                            'code': d.code,
+                            'address': d.address,
+                            'date': dateFormat.format(d.date),
+                            'time': timeFormat.format(d.date),
+                            'status': d.status,
+                            'image': d.items.isNotEmpty
+                                ? (d.items.first['imageUrl']?.toString() ??
+                                'assets/images/EngineOils.jpg')
+                                : 'assets/images/EngineOils.jpg',
+                          },
+                        )
                             .toList();
 
                     return TabBarView(
@@ -262,6 +229,7 @@ class DeliveryListPage extends StatelessWidget {
     );
   }
 }
+
 
 class DeliveryListTab extends StatelessWidget {
   final List<Map<String, String>> deliveries;
@@ -806,61 +774,3 @@ class DeliveryDetailsPopUp extends StatelessWidget {
   }
 }
 
-class DeliveryHistory extends StatelessWidget {
-  const DeliveryHistory({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return StreamBuilder<List<Delivery>>(
-      stream: fetchEmployeeDeliveries(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        if (!snapshot.hasData || snapshot.data!.isEmpty) {
-          return const Center(child: Text("No delivery history"));
-        }
-
-        final delivered = snapshot.data!
-            .where((d) => d.status == 'Delivered')
-            .toList();
-        final mapList = delivered
-            .map(
-              (d) => {
-                'code': d.code,
-                'address': d.address,
-                'date': "${d.date.day}/${d.date.month}/${d.date.year}",
-                'time':
-                    "${d.date.hour}:${d.date.minute.toString().padLeft(2, '0')}",
-                'status': d.status,
-                'image': d.items.isNotEmpty
-                    ? d.items.first['imageUrl'] ??
-                          'assets/images/EngineOils.jpg'
-                    : 'assets/images/EngineOils.jpg',
-              },
-            )
-            .toList();
-
-        return ListView.builder(
-          padding: const EdgeInsets.all(16),
-          itemCount: mapList.length,
-          itemBuilder: (context, index) {
-            final d = mapList[index];
-            return Padding(
-              padding: const EdgeInsets.fromLTRB(7, 0, 7, 16),
-              child: deliveryCard(
-                context: context,
-                image: d['image']!,
-                status: d['status']!,
-                code: d['code']!,
-                date: d['date']!,
-                time: d['time']!,
-                address: d['address']!,
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-}
