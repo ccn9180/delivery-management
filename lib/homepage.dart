@@ -35,6 +35,7 @@ class Delivery {
   }
 }
 
+//match the employee
 Future<String?> fetchEmployeeCode() async {
   final user = FirebaseAuth.instance.currentUser;
   if (user == null) return null;
@@ -47,6 +48,7 @@ Future<String?> fetchEmployeeCode() async {
   return userDoc.data()?['employeeID'];
 }
 
+//only fetch sysdate delivery
 Stream<List<Delivery>> fetchEmployeeDeliveries() async* {
   final employeeCode = await fetchEmployeeCode();
   if (employeeCode == null) {
@@ -54,14 +56,24 @@ Stream<List<Delivery>> fetchEmployeeDeliveries() async* {
     return;
   }
 
+  final now = DateTime.now(); // use local time
+  final startOfDayLocal = DateTime(now.year, now.month, now.day, 0, 0, 0);
+  final endOfDayLocal = DateTime(now.year, now.month, now.day, 23, 59, 59);
+
+  final startOfDay = startOfDayLocal.toUtc();
+  final endOfDay = endOfDayLocal.toUtc();
+
+  print("Querying between $startOfDay and $endOfDay (UTC)");
   yield* FirebaseFirestore.instance
       .collection('delivery')
       .where('employeeID', isEqualTo: employeeCode)
+      .where('deliveryDate', isGreaterThanOrEqualTo: startOfDay)
+      .where('deliveryDate', isLessThanOrEqualTo: endOfDay)
       .snapshots()
-      .map(
-        (snapshot) =>
-            snapshot.docs.map((doc) => Delivery.fromDoc(doc)).toList(),
+      .map((snapshot) =>
+      snapshot.docs.map((doc) => Delivery.fromDoc(doc)).toList()
       );
+
 }
 
 class HomePage extends StatefulWidget {
@@ -712,12 +724,11 @@ class DeliveryDetailsPopUp extends StatelessWidget {
                         onPressed: () {
                           FirebaseFirestore.instance
                               .collection('delivery')
-                              .doc(code)
-                              .update({'status': 'Delivered'});
+                              .doc(code);
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (context) => const GoogleMapPage(
+                              builder: (context) => GoogleMapPage(
                                 title: 'Delivery Live Map',
                               ),
                             ),

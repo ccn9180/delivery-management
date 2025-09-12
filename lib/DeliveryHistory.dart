@@ -5,6 +5,23 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'homepage.dart'; // for deliveryCard widget
 
+
+Stream<List<Delivery>> fetchAllDeliveries() async* {
+  final employeeCode = await fetchEmployeeCode();
+  if (employeeCode == null) {
+    yield [];
+    return;
+  }
+
+  yield* FirebaseFirestore.instance
+      .collection('delivery')
+      .where('employeeID', isEqualTo: employeeCode)
+      .snapshots()
+      .map((snapshot) =>
+      snapshot.docs.map((doc) => Delivery.fromDoc(doc)).toList());
+}
+
+
 class DeliveryHistory extends StatefulWidget {
   const DeliveryHistory({super.key});
 
@@ -89,7 +106,7 @@ class _DeliveryHistoryState extends State<DeliveryHistory> {
                     // List of deliveries
                     Expanded(
                       child: StreamBuilder<List<Delivery>>(
-                        stream: fetchEmployeeDeliveries(),
+                        stream: fetchAllDeliveries(),
                         builder: (context, snapshot) {
                           if (snapshot.connectionState == ConnectionState.waiting) {
                             return const Center(child: CircularProgressIndicator());
