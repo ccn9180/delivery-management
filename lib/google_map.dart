@@ -5,8 +5,8 @@ import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 class GoogleMapPage extends StatefulWidget {
-  const GoogleMapPage({super.key, required this.title});
-  final String title;
+  const GoogleMapPage({super.key});
+
 
   @override
   State<GoogleMapPage> createState() => _GoogleMapPageState();
@@ -133,16 +133,24 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      extendBodyBehindAppBar: true,
       appBar: AppBar(
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        title: Text(widget.title),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _initializeLocation,
-            tooltip: 'Refresh location',
-          ),
-        ],
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        automaticallyImplyLeading: false,
+        leading: Padding(
+          padding: const EdgeInsets.all(10),
+          child: GestureDetector(
+            onTap: ()=>Navigator.pop(context),
+            child: Container(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white.withOpacity(0.7),
+              ),
+              child: Icon(Icons.arrow_back, color: Colors.black),
+            ),
+          )
+        ),
       ),
       body: _buildBody(),
     );

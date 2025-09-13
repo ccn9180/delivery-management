@@ -63,7 +63,6 @@ Stream<List<Delivery>> fetchEmployeeDeliveries() async* {
   final startOfDay = startOfDayLocal.toUtc();
   final endOfDay = endOfDayLocal.toUtc();
 
-  print("Querying between $startOfDay and $endOfDay (UTC)");
   yield* FirebaseFirestore.instance
       .collection('delivery')
       .where('employeeID', isEqualTo: employeeCode)
@@ -72,7 +71,7 @@ Stream<List<Delivery>> fetchEmployeeDeliveries() async* {
       .snapshots()
       .map((snapshot) =>
       snapshot.docs.map((doc) => Delivery.fromDoc(doc)).toList()
-      );
+  );
 
 }
 
@@ -84,7 +83,7 @@ class HomePage extends StatefulWidget {
 
 class _HomePageStatus extends State<HomePage> {
   int _selectedIndex = 1;
-  late List<Widget> _pages;
+  late final List<Widget> _pages;
 
   @override
   void initState() {
@@ -95,20 +94,26 @@ class _HomePageStatus extends State<HomePage> {
         print(doc.data());
       }
     });
-    _pages = [DeliveryHistory(), const DeliveryListPage(), const ProfilePage()];
+    _pages = [
+      const DeliveryHistory(),
+      const DeliveryListPage(),
+      const ProfilePage()
+    ];
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: _pages[_selectedIndex],
+      body:IndexedStack(
+        index: _selectedIndex,
+        children: _pages,
+      ),
       bottomNavigationBar: Theme(
         data: Theme.of(context).copyWith(
           splashColor: Colors.transparent,
           highlightColor: Colors.transparent,
           splashFactory: NoSplash.splashFactory,
         ),
-
         child: BottomNavigationBar(
           backgroundColor: Colors.white,
           currentIndex: _selectedIndex,
@@ -133,7 +138,10 @@ class _HomePageStatus extends State<HomePage> {
               icon: Icon(Icons.home),
               label: 'Deliveries List',
             ),
-            BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
+            BottomNavigationBarItem(
+                icon: Icon(Icons.person),
+                label: 'Profile'
+            ),
           ],
         ),
       ),
@@ -187,13 +195,8 @@ class DeliveryListPage extends StatelessWidget {
                       );
                     }
 
-                    if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                      return const Center(
-                        child: Text("No deliveries assigned"),
-                      );
-                    }
+                    final deliveries = snapshot.data ?? [];
 
-                    final deliveries = snapshot.data!;
                     final newOrder = deliveries
                         .where((d) => d.status == 'New Order')
                         .toList();
@@ -205,7 +208,7 @@ class DeliveryListPage extends StatelessWidget {
                         .toList();
 
                     final dateFormat = DateFormat('dd/MM/yyyy');
-                    final timeFormat = DateFormat('HH:mm');
+                    final timeFormat = DateFormat('hh:mm a');
 
                     List<Map<String, String>> mapList(List<Delivery> list) =>
                         list
@@ -221,14 +224,22 @@ class DeliveryListPage extends StatelessWidget {
                                 'assets/images/EngineOils.jpg')
                                 : 'assets/images/EngineOils.jpg',
                           },
-                        )
-                            .toList();
+                        ).toList();
 
                     return TabBarView(
                       children: [
-                        DeliveryListTab(deliveries: mapList(newOrder)),
-                        DeliveryListTab(deliveries: mapList(ongoing)),
-                        DeliveryListTab(deliveries: mapList(finished)),
+                        DeliveryListTab(
+                          deliveries: mapList(newOrder),
+                          emptyMessages: "No new orders assigned today",
+                        ),
+                        DeliveryListTab(
+                          deliveries: mapList(ongoing),
+                          emptyMessages: "No on-going deliveries at the moment",
+                        ),
+                        DeliveryListTab(
+                          deliveries: mapList(finished),
+                          emptyMessages: "No deliveries have been completed yet",
+                        ),
                       ],
                     );
                   },
@@ -243,17 +254,44 @@ class DeliveryListPage extends StatelessWidget {
 }
 
 
-class DeliveryListTab extends StatelessWidget {
+class DeliveryListTab extends StatefulWidget {
   final List<Map<String, String>> deliveries;
-  const DeliveryListTab({super.key, required this.deliveries});
+  final String emptyMessages;
+
+  const DeliveryListTab({
+    super.key,
+    required this.deliveries,
+    required this.emptyMessages,
+  });
+
+  @override
+  _DeliveryListTabState createState() => _DeliveryListTabState();
+}
+
+class _DeliveryListTabState extends State<DeliveryListTab>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
+
+    if (widget.deliveries.isEmpty) {
+      return Center(
+        child: Text(
+          widget.emptyMessages,
+          style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
+          textAlign: TextAlign.center,
+        ),
+      );
+    }
+
     return ListView.builder(
       padding: EdgeInsets.all(16),
-      itemCount: deliveries.length,
+      itemCount: widget.deliveries.length,
       itemBuilder: (context, index) {
-        final d = deliveries[index];
+        final d = widget.deliveries[index];
         return Padding(
           padding: EdgeInsets.fromLTRB(7, 0, 7, 16),
           child: deliveryCard(
@@ -270,6 +308,7 @@ class DeliveryListTab extends StatelessWidget {
     );
   }
 }
+
 
 Widget deliveryCard({
   required BuildContext context,
@@ -291,7 +330,7 @@ Widget deliveryCard({
 
       final data = doc.data() as Map<String, dynamic>;
       final List<Map<String, dynamic>> deliveryItems =
-          List<Map<String, dynamic>>.from(data['deliveryItems'] ?? []);
+      List<Map<String, dynamic>>.from(data['deliveryItems'] ?? []);
 
       showGeneralDialog(
         context: context,
@@ -300,12 +339,21 @@ Widget deliveryCard({
         barrierColor: Colors.black.withOpacity(0.5),
         transitionDuration: const Duration(milliseconds: 300),
         pageBuilder: (context, anim1, anim2) {
+          final loc = data['location'] != null
+              ? LatLng(
+            (data['location'] as GeoPoint).latitude,
+            (data['location'] as GeoPoint).longitude,
+          )
+              : LatLng(5.40688, 100.30968);
+          print('Delivery $code location: ${data['location']}');
+
           return Center(
             child: DeliveryDetailsPopUp(
               code: code,
               address: address,
               status: status,
               items: deliveryItems,
+              location: loc,
             ),
           );
         },
@@ -349,21 +397,21 @@ Widget deliveryCard({
                           .doc(code)
                           .get()
                           .then((doc) async {
-                            if (!doc.exists) return null;
+                        if (!doc.exists) return null;
 
-                            final data = doc.data() as Map<String, dynamic>;
-                            final items = List<Map<String, dynamic>>.from(
-                              data['deliveryItems'] ?? [],
-                            );
+                        final data = doc.data() as Map<String, dynamic>;
+                        final items = List<Map<String, dynamic>>.from(
+                          data['deliveryItems'] ?? [],
+                        );
 
-                            if (items.isEmpty) return null;
+                        if (items.isEmpty) return null;
 
-                            final firstItemId = items.first['itemID'];
-                            return FirebaseFirestore.instance
-                                .collection('items')
-                                .doc(firstItemId)
-                                .get();
-                          }),
+                        final firstItemId = items.first['itemID'];
+                        return FirebaseFirestore.instance
+                            .collection('items')
+                            .doc(firstItemId)
+                            .get();
+                      }),
                       builder: (context, snapshot) {
                         if (snapshot.connectionState ==
                             ConnectionState.waiting) {
@@ -389,28 +437,28 @@ Widget deliveryCard({
                         }
 
                         final data =
-                            snapshot.data!.data() as Map<String, dynamic>;
+                        snapshot.data!.data() as Map<String, dynamic>;
                         final imageUrl = data['imageUrl'] ?? '';
 
                         return imageUrl.isNotEmpty
                             ? Image.network(
-                                imageUrl,
-                                width: 60,
-                                height: 60,
-                                fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) => Image.asset(
-                                  'assets/images/EngineOils.jpg',
-                                  width: 60,
-                                  height: 60,
-                                  fit: BoxFit.cover,
-                                ),
-                              )
+                          imageUrl,
+                          width: 60,
+                          height: 60,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => Image.asset(
+                            'assets/images/EngineOils.jpg',
+                            width: 60,
+                            height: 60,
+                            fit: BoxFit.cover,
+                          ),
+                        )
                             : Image.asset(
-                                'assets/images/EngineOils.jpg',
-                                width: 60,
-                                height: 60,
-                                fit: BoxFit.cover,
-                              );
+                          'assets/images/EngineOils.jpg',
+                          width: 60,
+                          height: 60,
+                          fit: BoxFit.cover,
+                        );
                       },
                     ),
                   ),
@@ -502,6 +550,7 @@ class DeliveryDetailsPopUp extends StatelessWidget {
   final String address;
   final String status;
   final List<Map<String, dynamic>> items;
+  final LatLng? location;
 
   const DeliveryDetailsPopUp({
     super.key,
@@ -509,6 +558,7 @@ class DeliveryDetailsPopUp extends StatelessWidget {
     required this.address,
     required this.status,
     required this.items,
+    this.location,
   });
 
   @override
@@ -526,9 +576,12 @@ class DeliveryDetailsPopUp extends StatelessWidget {
           color: Colors.white,
           borderRadius: BorderRadius.circular(20),
         ),
+
         child: SingleChildScrollView(
+          physics: BouncingScrollPhysics(),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
               // Delivery code
               Text(
@@ -542,15 +595,30 @@ class DeliveryDetailsPopUp extends StatelessWidget {
               const SizedBox(height: 10),
 
               // Map placeholder
-              ClipRRect(
-                borderRadius: BorderRadius.circular(10),
-                child: SizedBox(
-                  height: 180,
-                  width: double.infinity,
-                  child: Image.asset(
-                    'assets/images/map.jpeg',
-                    fit: BoxFit.cover,
+              Container(
+                height: 200,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.grey.shade300),
+                ),
+                child: GoogleMap(
+                  mapType: MapType.normal,
+                  initialCameraPosition: CameraPosition(
+                    target: location ?? LatLng(5.40688, 100.30968), // default if null
+                    zoom: 15,
                   ),
+                  markers: {
+                    Marker(
+                      markerId: MarkerId(code),
+                      position: location ?? LatLng(5.40688, 100.30968),
+                      infoWindow: InfoWindow(title: 'Delivery Location'),
+                    ),
+                  },
+                  myLocationEnabled: false,
+                  zoomControlsEnabled: false,
+                  onMapCreated: (GoogleMapController controller) {
+                    // You can save the controller if you need to control the map later
+                  },
                 ),
               ),
 
@@ -587,7 +655,7 @@ class DeliveryDetailsPopUp extends StatelessWidget {
                           return const SizedBox();
                         }
                         final data =
-                            snapshot.data!.data() as Map<String, dynamic>?;
+                        snapshot.data!.data() as Map<String, dynamic>?;
 
                         final imageUrl = data?['imageUrl'] ?? '';
                         return Padding(
@@ -598,7 +666,7 @@ class DeliveryDetailsPopUp extends StatelessWidget {
                               borderRadius: BorderRadius.circular(6),
                             ),
                             child: ClipRRect(
-                              borderRadius: BorderRadius.circular(6), // 👈 Match radius here
+                              borderRadius: BorderRadius.circular(6),
                               child: imageUrl.isNotEmpty
                                   ? Image.network(
                                 imageUrl,
@@ -647,7 +715,7 @@ class DeliveryDetailsPopUp extends StatelessWidget {
                       }
 
                       final data =
-                          snapshot.data!.data() as Map<String, dynamic>;
+                      snapshot.data!.data() as Map<String, dynamic>;
                       final name = data['itemName'] ?? 'Unknown';
                       final price = (data['price'] ?? 0).toDouble();
                       final qty = item['quantity'] ?? 0;
@@ -728,9 +796,7 @@ class DeliveryDetailsPopUp extends StatelessWidget {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (context) => GoogleMapPage(
-                                title: 'Delivery Live Map',
-                              ),
+                              builder: (context) => GoogleMapPage(),
                             ),
                           );
                         },
@@ -784,4 +850,3 @@ class DeliveryDetailsPopUp extends StatelessWidget {
     );
   }
 }
-

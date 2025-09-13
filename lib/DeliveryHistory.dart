@@ -112,18 +112,19 @@ class _DeliveryHistoryState extends State<DeliveryHistory> {
                             return const Center(child: CircularProgressIndicator());
                           }
 
+                          //no delivery assign
                           if (!snapshot.hasData || snapshot.data!.isEmpty) {
                             return _emptyState();
                           }
 
+                          //no delivered
                           final delivered = snapshot.data!
                               .where((d) => d.status == 'Delivered')
                               .toList();
-
                           if (delivered.isEmpty) return _emptyState();
 
                           final dateFormat = DateFormat('dd/MM/yyyy');
-                          final timeFormat = DateFormat('HH:mm');
+                          final timeFormat = DateFormat('hh:mm a');
 
                           List<Map<String, String>> mappedDeliveries = delivered.map(
                                 (d) => {

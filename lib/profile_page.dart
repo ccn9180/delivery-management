@@ -2,8 +2,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:convert';
-import 'dart:io';
-
 import 'profile.dart';
 import 'changepassword.dart';
 import 'login_page.dart';
@@ -19,14 +17,20 @@ class _ProfilePageState extends State<ProfilePage> {
   String? _profileImageUrl; // Can be URL or Base64
   String? _displayName;
   final user = FirebaseAuth.instance.currentUser;
-
-  /// Toggle for free-tier testing (Base64) vs production (Storage URL)
   final bool useBase64ForTesting = true;
+  bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
     _loadUserProfile();
+  }
+
+  // Callback function to update the image
+  void _updateProfileImage(String newImage) {
+    setState(() {
+      _profileImageUrl = newImage;
+    });
   }
 
   // Helper getter for CircleAvatar image
@@ -38,21 +42,32 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Future<void> _loadUserProfile() async {
-    if (user == null) return;
+    if (user == null) {
+      setState(() => _isLoading = false);
+      return;
+    }
 
-    final doc = await FirebaseFirestore.instance
-        .collection("users")
-        .doc(user!.uid)
-        .get();
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection("users")
+          .doc(user!.uid)
+          .get();
 
-    if (doc.exists) {
-      final data = doc.data()!;
-      setState(() {
-        _profileImageUrl = (data["profileImage"] as String?)?.isNotEmpty == true
-            ? data["profileImage"]
-            : null;
-        _displayName = data["name"] as String?;
-      });
+      if (doc.exists) {
+        final data = doc.data()!;
+        setState(() {
+          _profileImageUrl = (data["profileImage"] as String?)?.isNotEmpty == true
+              ? data["profileImage"]
+              : null;
+          _displayName = data["name"] as String?;
+          _isLoading = false;
+        });
+      } else {
+        setState(() => _isLoading = false);
+      }
+    } catch (e) {
+      print("Error loading profile: $e");
+      setState(() => _isLoading = false);
     }
   }
 
@@ -125,7 +140,9 @@ class _ProfilePageState extends State<ProfilePage> {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (context) => const Profile(),
+                          builder: (context) => Profile(
+                            onImageChanged: _updateProfileImage, // pass callback
+                          ),
                         ),
                       );
                     },
