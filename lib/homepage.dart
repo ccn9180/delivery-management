@@ -7,7 +7,6 @@ import 'package:intl/intl.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'DeliveryHistory.dart';
 import 'google_map.dart';
-import 'package:percent_indicator/circular_percent_indicator.dart';
 
 class Delivery {
   final String code;
@@ -163,7 +162,47 @@ class DeliveryListPage extends StatelessWidget {
           child: Column(
             children: [
               // Header
-              const PageHeader(title: "Delivery List"),
+              PageHeader(
+                title: "Delivery List",
+                extraWidget: StreamBuilder<List<Delivery>>(
+                  stream: fetchEmployeeDeliveries(),
+                  builder: (context, snapshot) {
+                    final deliveries = snapshot.data ?? [];
+                    final total = deliveries.length;
+                    final delivered = deliveries.where((d) => d.status == 'Delivered').length;
+                    final progress = total == 0 ? 0.0 : delivered / total;
+
+                    return SizedBox(
+                      width: 50,
+                      height: 50,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          SizedBox(
+                            width: 46,
+                            height: 46,
+                            child: CircularProgressIndicator(
+                              value: progress,
+                              strokeWidth: 6,
+                              backgroundColor: Colors.grey.shade200,
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                progress == 1.0 ? Colors.green : Colors.orange,
+                              ),
+                            ),
+                          ),
+                          Text(
+                            "${(progress * 100).toInt()}%",
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
 
               // TabBar
               const TabBar(
@@ -227,64 +266,22 @@ class DeliveryListPage extends StatelessWidget {
                           },
                         ).toList();
 
-                    final total = deliveries.length;
-                    final delivered = finished.length;
-                    final progress = total == 0 ? 0.0 : delivered / total;
-
-                    return Column(
+                    return TabBarView(
                       children: [
-                        // === Progress Circle ===
-                        Padding(
-                          padding: const EdgeInsets.all(16.0),
-                          child: CircularPercentIndicator(
-                            radius: 70.0,
-                            lineWidth: 8.0,
-                            percent: progress,
-                            center: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(
-                                  "${(progress * 100).toInt()}%",
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 18,
-                                  ),
-                                ),
-                                Text(
-                                  "$delivered / $total",
-                                  style: const TextStyle(fontSize: 13, color: Colors.grey),
-                                ),
-                              ],
-                            ),
-                            progressColor: progress == 1.0 ? Colors.green : Colors.orange,
-                            backgroundColor: Colors.grey.shade200,
-                            circularStrokeCap: CircularStrokeCap.round,
-                            animation: true,
-                          ),
+                        DeliveryListTab(
+                          deliveries: mapList(newOrder),
+                          emptyMessages: "No new orders assigned today",
                         ),
-
-                        // === Tabs ===
-                        Expanded(
-                          child: TabBarView(
-                            children: [
-                              DeliveryListTab(
-                                deliveries: mapList(newOrder),
-                                emptyMessages: "No new orders assigned today",
-                              ),
-                              DeliveryListTab(
-                                deliveries: mapList(ongoing),
-                                emptyMessages: "No on-going deliveries at the moment",
-                              ),
-                              DeliveryListTab(
-                                deliveries: mapList(finished),
-                                emptyMessages: "No deliveries have been completed yet",
-                              ),
-                            ],
-                          ),
+                        DeliveryListTab(
+                          deliveries: mapList(ongoing),
+                          emptyMessages: "No on-going deliveries at the moment",
+                        ),
+                        DeliveryListTab(
+                          deliveries: mapList(finished),
+                          emptyMessages: "No deliveries have been completed yet",
                         ),
                       ],
                     );
-
                   },
                 ),
               ),

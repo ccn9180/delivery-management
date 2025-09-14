@@ -45,7 +45,7 @@ class _ProfileState extends State<Profile> {
         setState(() {
           _displayName = data['name'] as String?;
           _profileImageUrl =
-              (data['profileImage'] as String?)?.isNotEmpty == true
+          (data['profileImage'] as String?)?.isNotEmpty == true
               ? data['profileImage']
               : null;
           _employeeID = data['employeeID'] ?? 'Not set';
@@ -94,10 +94,10 @@ class _ProfileState extends State<Profile> {
             .collection('users')
             .doc(user!.uid)
             .set({
-              "profileImage": imageToSave,
-              "name": _displayName ?? user!.displayName ?? "User Name",
-              "employeeID": _employeeID,
-            }, SetOptions(merge: true));
+          "profileImage": imageToSave,
+          "name": _displayName ?? user!.displayName ?? "User Name",
+          "employeeID": _employeeID,
+        }, SetOptions(merge: true));
 
         // Update UI
         setState(() {
@@ -174,10 +174,10 @@ class _ProfileState extends State<Profile> {
                         backgroundImage: profileImageProvider,
                         child: profileImageProvider == null
                             ? const Icon(
-                                Icons.person,
-                                size: 100,
-                                color: Color(0xFF1B6C07),
-                              )
+                          Icons.person,
+                          size: 100,
+                          color: Color(0xFF1B6C07),
+                        )
                             : null,
                       ),
                     ),
