@@ -1,3 +1,4 @@
+import 'package:delivery/gmailauthhandler.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -190,7 +191,7 @@ class _ProfilePageState extends State<ProfilePage> {
                     onTap: () {
                       Navigator.push(
                           context,
-                          MaterialPageRoute(builder: (context) => const ChangePasswordPage()),
+                          MaterialPageRoute(builder: (context) => const GmailAuthHandler()),
                       );
                     },
                   ),

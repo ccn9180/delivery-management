@@ -106,7 +106,6 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
 
   @override
   void dispose() {
-    // TODO: implement dispose
     _oldPasswordController.dispose();
     _newPasswordController.dispose();
     _confirmPasswordController.dispose();
@@ -129,11 +128,10 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
             onPressed: () => Navigator.pop(context),
           ),
         ),
-
-        title: Padding(
+        title: const Padding(
           padding: EdgeInsets.only(top: 12),
-          child: const Text(
-            "Change Password Test",
+          child: Text(
+            "Change Password",
             style: TextStyle(
               color: Colors.black,
               fontWeight: FontWeight.w600,
@@ -141,99 +139,108 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
           ),
         ),
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(30),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                "Choose a New Password",
-                style: TextStyle(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 16,
-                ),
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          return SingleChildScrollView(
+            padding: const EdgeInsets.all(30),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                minHeight: constraints.maxHeight - 30, // Account for padding
               ),
-              const SizedBox(height: 4),
-              const Text(
-                "Enter and confirm your new password to regain access",
-                style: TextStyle(
-                  color: Colors.black54,
-                  fontSize: 12.5,
-                ),
-              ),
+              child: IntrinsicHeight(
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        "Choose a New Password",
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 16,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      const Text(
+                        "Enter and confirm your new password to regain access",
+                        style: TextStyle(
+                          color: Colors.black54,
+                          fontSize: 12.5,
+                        ),
+                      ),
+                      const SizedBox(height: 25),
 
-              const SizedBox(height: 25,),
+                      // Old Password
+                      _fieldTitle("Old Password"),
+                      _textField(
+                        _oldPasswordController,
+                            (value) => value!.isEmpty ? "Enter your old password" : null,
+                      ),
+                      const SizedBox(height: 10),
 
-              // Old Password
-              _fieldTitle("Old Password"),
-              _textField(
-                _oldPasswordController,
-                    (value) =>
-                value!.isEmpty ? "Enter your old password" : null,
-              ),
+                      // New Password
+                      _fieldTitle("New Password"),
+                      _textField(
+                        _newPasswordController,
+                            (value) {
+                          if (value == null || value.isEmpty) {
+                            return "Enter a new password";
+                          }
+                          if (value.length < 6) {
+                            return "Password must be at least 6 characters";
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 10),
 
-              const SizedBox(height: 10,),
+                      // Confirm Password
+                      _fieldTitle("Confirm New Password"),
+                      _textField(
+                        _confirmPasswordController,
+                            (value) {
+                          if (value != _newPasswordController.text) {
+                            return "Passwords do not match";
+                          }
+                          return null;
+                        },
+                      ),
 
-              // New Password
-              _fieldTitle("New Password"),
-              _textField(
-                _newPasswordController,
-                    (value) {
-                  if (value == null || value.isEmpty) {
-                    return "Enter a new password";
-                  }
-                  if (value.length < 6) {
-                    return "Password must be at least 6 characters";
-                  }
-                  return null;
-                },
-              ),
+                      // Spacer to push button to bottom
+                      const Expanded(child: SizedBox()),
 
-              const SizedBox(height: 10,),
-
-              // Confirm Password
-              _fieldTitle("Confirm New Password"),
-              _textField(
-                _confirmPasswordController,
-                    (value) {
-                  if (value != _newPasswordController.text) {
-                    return "Passwords do not match";
-                  }
-                  return null;
-                },
-              ),
-
-              const SizedBox(height: 150),
-
-              // Reset Password Button
-              SizedBox(
-                width: double.infinity,
-                height: 48,
-                child: ElevatedButton(
-                  onPressed: _loading ? null : _resetPassword,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF1B6C07),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
+                      // Reset Password Button
+                      SizedBox(
+                        width: double.infinity,
+                        height: 48,
+                        child: ElevatedButton(
+                          onPressed: _loading ? null : _resetPassword,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF1B6C07),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                          child: _loading
+                              ? const CircularProgressIndicator(color: Colors.white)
+                              : const Text(
+                            "Reset Password",
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 20), // Add some bottom padding
+                    ],
                   ),
-                  child: _loading
-                      ? const CircularProgressIndicator(color: Colors.white)
-                      : const Text(
-                    "Reset Password",
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
-                    ),
-                  ),
                 ),
               ),
-            ],
-          ),
-        ),
+            ),
+          );
+        },
       ),
     );
   }
