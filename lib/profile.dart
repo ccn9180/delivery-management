@@ -96,7 +96,7 @@ class _ProfileState extends State<Profile> {
             .set({
           "profileImage": imageToSave,
           "name": _displayName ?? user!.displayName ?? "User Name",
-          "employeeID": _employeeID
+          "employeeID": _employeeID,
         }, SetOptions(merge: true));
 
         // Update UI
@@ -108,9 +108,9 @@ class _ProfileState extends State<Profile> {
           widget.onImageChanged!(imageToSave);
         }
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Profile image updated!")),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text("Profile image updated!")));
       } catch (e) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text("Error updating profile image: $e")),
@@ -122,9 +122,7 @@ class _ProfileState extends State<Profile> {
   @override
   Widget build(BuildContext context) {
     if (_displayName == null) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
     return Scaffold(
@@ -146,9 +144,10 @@ class _ProfileState extends State<Profile> {
           child: Text(
             "Profile",
             style: TextStyle(
-                color: Color(0xFF1B6C07),
-                fontWeight: FontWeight.bold,
-                fontSize: 24),
+              color: Color(0xFF1B6C07),
+              fontWeight: FontWeight.bold,
+              fontSize: 24,
+            ),
           ),
         ),
       ),
@@ -161,21 +160,41 @@ class _ProfileState extends State<Profile> {
             Center(
               child: GestureDetector(
                 onTap: _pickAndUploadImage,
-                child: Container(
-                  padding: const EdgeInsets.all(1.5),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade300,
-                    shape: BoxShape.circle,
-                  ),
-                  child: CircleAvatar(
-                    radius: 80,
-                    backgroundColor: Colors.white,
-                    backgroundImage: profileImageProvider,
-                    child: profileImageProvider == null
-                        ? const Icon(Icons.person,
-                        size: 100, color: Color(0xFF1B6C07))
-                        : null,
-                  ),
+                child: Stack(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(1.5),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade300,
+                        shape: BoxShape.circle,
+                      ),
+                      child: CircleAvatar(
+                        radius: 80,
+                        backgroundColor: Colors.white,
+                        backgroundImage: profileImageProvider,
+                        child: profileImageProvider == null
+                            ? const Icon(
+                          Icons.person,
+                          size: 100,
+                          color: Color(0xFF1B6C07),
+                        )
+                            : null,
+                      ),
+                    ),
+                    Positioned(
+                      bottom: 0,
+                      right: 12,
+                      child: Container(
+                        padding: EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.grey.shade300, width: 2),
+                        ),
+                        child: Icon(Icons.edit, size: 20, color: Colors.green),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -192,8 +211,10 @@ class _ProfileState extends State<Profile> {
                 _buildSpacerRow(),
                 _buildTableRow('Phone Number', _phoneNum ?? 'Phone Number'),
                 _buildSpacerRow(),
-                _buildTableRow('Total Delivery Completed',
-                    (_deliveredCount?.toString() ?? '0')),
+                _buildTableRow(
+                  'Total Delivery Completed',
+                  (_deliveredCount?.toString() ?? '0'),
+                ),
                 _buildSpacerRow(),
               ],
             ),
@@ -204,19 +225,23 @@ class _ProfileState extends State<Profile> {
   }
 
   TableRow _buildTableRow(String title, String value) {
-    return TableRow(children: [
-      Text(title,
-          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-      Align(
+    return TableRow(
+      children: [
+        Text(
+          title,
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+        ),
+        Align(
           alignment: Alignment.centerLeft,
-          child: Text(value, style: const TextStyle(fontSize: 16))),
-    ]);
+          child: Text(value, style: const TextStyle(fontSize: 16)),
+        ),
+      ],
+    );
   }
 
   TableRow _buildSpacerRow() {
-    return const TableRow(children: [
-      SizedBox(height: 15),
-      SizedBox(height: 15),
-    ]);
+    return const TableRow(
+      children: [SizedBox(height: 15), SizedBox(height: 15)],
+    );
   }
 }

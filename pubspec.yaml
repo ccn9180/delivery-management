@@ -50,7 +50,8 @@ dependencies:
   cached_network_image: ^3.4.1
   http: ^1.1.0
   image: ^4.1.1
-  flutter_polyline_points: ^3.0.0
+  flutter_polyline_points: ^3.0.1
+  percent_indicator: ^4.2.5
 
 dev_dependencies:
   flutter_test:
