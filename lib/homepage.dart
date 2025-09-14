@@ -790,13 +790,16 @@ class DeliveryDetailsPopUp extends StatelessWidget {
                     } else if (status == 'On-Going') {
                       return ElevatedButton(
                         onPressed: () {
-                          FirebaseFirestore.instance
-                              .collection('delivery')
-                              .doc(code);
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (context) => GoogleMapPage(),
+                              builder: (context) => GoogleMapPage(
+                                deliveryCode: code,
+                                deliveryAddress: address,
+                                deliveryLocation: location,
+                                deliveryStatus: status,
+                                deliveryItems: items,
+                              ),
                             ),
                           );
                         },
