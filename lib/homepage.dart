@@ -8,6 +8,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'DeliveryHistory.dart';
 import 'google_map.dart';
 
+
 class Delivery {
   final String code;
   final String address;
@@ -226,22 +227,64 @@ class DeliveryListPage extends StatelessWidget {
                           },
                         ).toList();
 
-                    return TabBarView(
+                    final total = deliveries.length;
+                    final delivered = finished.length;
+                    final progress = total == 0 ? 0.0 : delivered / total;
+
+                    return Column(
                       children: [
-                        DeliveryListTab(
-                          deliveries: mapList(newOrder),
-                          emptyMessages: "No new orders assigned today",
+                        // === Progress Circle ===
+                        Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: CircularPercentIndicator(
+                            radius: 70.0,
+                            lineWidth: 8.0,
+                            percent: progress,
+                            center: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  "${(progress * 100).toInt()}%",
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 18,
+                                  ),
+                                ),
+                                Text(
+                                  "$delivered / $total",
+                                  style: const TextStyle(fontSize: 13, color: Colors.grey),
+                                ),
+                              ],
+                            ),
+                            progressColor: progress == 1.0 ? Colors.green : Colors.orange,
+                            backgroundColor: Colors.grey.shade200,
+                            circularStrokeCap: CircularStrokeCap.round,
+                            animation: true,
+                          ),
                         ),
-                        DeliveryListTab(
-                          deliveries: mapList(ongoing),
-                          emptyMessages: "No on-going deliveries at the moment",
-                        ),
-                        DeliveryListTab(
-                          deliveries: mapList(finished),
-                          emptyMessages: "No deliveries have been completed yet",
+
+                        // === Tabs ===
+                        Expanded(
+                          child: TabBarView(
+                            children: [
+                              DeliveryListTab(
+                                deliveries: mapList(newOrder),
+                                emptyMessages: "No new orders assigned today",
+                              ),
+                              DeliveryListTab(
+                                deliveries: mapList(ongoing),
+                                emptyMessages: "No on-going deliveries at the moment",
+                              ),
+                              DeliveryListTab(
+                                deliveries: mapList(finished),
+                                emptyMessages: "No deliveries have been completed yet",
+                              ),
+                            ],
+                          ),
                         ),
                       ],
                     );
+
                   },
                 ),
               ),
