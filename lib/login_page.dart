@@ -25,6 +25,8 @@ class _LoginPageState extends State<LoginPage> {
     super.dispose();
   }
 
+
+
   Future<void> _login() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -247,17 +249,6 @@ class _LoginPageState extends State<LoginPage> {
                           ),
 
                         const Spacer(),
-
-                        // Error message
-                        if (_errorMessage.isNotEmpty)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 20.0),
-                            child: Text(
-                              _errorMessage,
-                              style: const TextStyle(color: Colors.red, fontSize: 14),
-                              textAlign: TextAlign.center,
-                            ),
-                          ),
                       ],
                     ),
                   ),
