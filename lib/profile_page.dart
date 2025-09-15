@@ -149,8 +149,10 @@ class _ProfilePageState extends State<ProfilePage> {
                         title: Text('Log Out', style: TextStyle(fontSize: screenHeight * 0.022)),
                         onTap: () async {
                           await FirebaseAuth.instance.signOut();
-                          Navigator.pushReplacement(
-                              context, MaterialPageRoute(builder: (context) => const LoginPage()));
+                          Navigator.of(context).pushAndRemoveUntil(
+                            MaterialPageRoute(builder: (context) => const LoginPage()),
+                                (route) => false, // remove all previous routes
+                          );
                         },
                       ),
                     ],
