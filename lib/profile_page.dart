@@ -1,6 +1,10 @@
+import 'package:delivery/gmailauthhandler.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'dart:io';
 import 'dart:convert';
 import 'profile.dart';
 import 'changepassword.dart';
@@ -17,6 +21,8 @@ class _ProfilePageState extends State<ProfilePage> {
   String? _profileImageUrl; // Can be URL or Base64
   String? _displayName;
   final user = FirebaseAuth.instance.currentUser;
+
+  /// Toggle for free-tier testing (Base64) vs production (Storage URL)
   final bool useBase64ForTesting = true;
   bool _isLoading = true;
 
@@ -39,6 +45,11 @@ class _ProfilePageState extends State<ProfilePage> {
     return useBase64ForTesting
         ? Image.memory(base64Decode(_profileImageUrl!)).image
         : NetworkImage(_profileImageUrl!);
+  }
+
+  // Helper method for showing SnackBars
+  void showSnack(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
   Future<void> _loadUserProfile() async {
@@ -156,10 +167,8 @@ class _ProfilePageState extends State<ProfilePage> {
                     title: const Text('Change Password'),
                     onTap: () {
                       Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const ChangePasswordPage(),
-                        ),
+                          context,
+                          MaterialPageRoute(builder: (context) => const GmailAuthHandler()),
                       );
                     },
                   ),
