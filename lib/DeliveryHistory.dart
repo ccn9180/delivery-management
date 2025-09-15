@@ -3,8 +3,7 @@ import 'package:delivery/widget/header.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'homepage.dart'; // for deliveryCard widget
-
+import 'homepage.dart'; // deliveryCard widget
 
 Stream<List<Delivery>> fetchAllDeliveries() async* {
   final employeeCode = await fetchEmployeeCode();
@@ -21,7 +20,6 @@ Stream<List<Delivery>> fetchAllDeliveries() async* {
       snapshot.docs.map((doc) => Delivery.fromDoc(doc)).toList());
 }
 
-
 class DeliveryHistory extends StatefulWidget {
   const DeliveryHistory({super.key});
 
@@ -31,16 +29,18 @@ class DeliveryHistory extends StatefulWidget {
 
 class _DeliveryHistoryState extends State<DeliveryHistory> {
   String _searchQuery = "";
-  final _searchCtrl=TextEditingController();
+  final _searchCtrl = TextEditingController();
 
   @override
   void dispose() {
-    super.dispose();
     _searchCtrl.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final width = MediaQuery.of(context).size.width;
+
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
@@ -49,7 +49,6 @@ class _DeliveryHistoryState extends State<DeliveryHistory> {
           children: [
             const PageHeader(title: "Delivery History"),
             const SizedBox(height: 10),
-
             Expanded(
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -63,44 +62,46 @@ class _DeliveryHistoryState extends State<DeliveryHistory> {
                 child: Column(
                   children: [
                     // Search bar
-                    TextField(
-                      controller: _searchCtrl,
-                      decoration: InputDecoration(
-                        hintText: "Search by Delivery ID or Date",
-                        prefixIcon: const Icon(Icons.search, color: Colors.grey),
-                        suffixIcon: IconButton(
-                          icon: const Icon(Icons.calendar_today, color: Colors.grey),
-                          onPressed: () async {
-                            final pickedDate = await showDatePicker(
-                              context: context,
-                              initialDate: DateTime.now(),
-                              firstDate: DateTime(2000),
-                              lastDate: DateTime(2100),
-                            );
-                            if (pickedDate != null) {
-                              final formattedDate =
-                              DateFormat('dd/MM/yyyy').format(pickedDate);
-                              setState(() {
-                                _searchQuery = formattedDate.toLowerCase();
-                                _searchCtrl.text = formattedDate;
-                              });
-                            }
-                          },
+                    SizedBox(
+                      width: width,
+                      child: TextField(
+                        controller: _searchCtrl,
+                        decoration: InputDecoration(
+                          hintText: "Search by Delivery ID or Date",
+                          prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                          suffixIcon: IconButton(
+                            icon: const Icon(Icons.calendar_today, color: Colors.grey),
+                            onPressed: () async {
+                              final pickedDate = await showDatePicker(
+                                context: context,
+                                initialDate: DateTime.now(),
+                                firstDate: DateTime(2000),
+                                lastDate: DateTime(2100),
+                              );
+                              if (pickedDate != null) {
+                                final formattedDate =
+                                DateFormat('dd/MM/yyyy').format(pickedDate);
+                                setState(() {
+                                  _searchQuery = formattedDate.toLowerCase();
+                                  _searchCtrl.text = formattedDate;
+                                });
+                              }
+                            },
+                          ),
+                          filled: true,
+                          fillColor: Colors.grey[100],
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide.none,
+                          ),
                         ),
-                        filled: true,
-                        fillColor: Colors.grey[100],
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide.none,
-                        ),
+                        onChanged: (value) {
+                          setState(() {
+                            _searchQuery = value.trim().toLowerCase();
+                          });
+                        },
                       ),
-                      onChanged: (value) {
-                        setState(() {
-                          _searchQuery = value.trim().toLowerCase();
-                        });
-                      },
                     ),
-
                     const SizedBox(height: 12),
 
                     // List of deliveries
@@ -112,15 +113,14 @@ class _DeliveryHistoryState extends State<DeliveryHistory> {
                             return const Center(child: CircularProgressIndicator());
                           }
 
-                          //no delivery assign
                           if (!snapshot.hasData || snapshot.data!.isEmpty) {
                             return _emptyState();
                           }
 
-                          //no delivered
                           final delivered = snapshot.data!
                               .where((d) => d.status == 'Delivered')
                               .toList();
+
                           if (delivered.isEmpty) return _emptyState();
 
                           final dateFormat = DateFormat('dd/MM/yyyy');
@@ -157,8 +157,34 @@ class _DeliveryHistoryState extends State<DeliveryHistory> {
                             );
                           }
 
-                          return ListView.builder(
-                            padding: EdgeInsets.zero, // important: avoid double padding
+                          // Use GridView on wide screens
+                          final isWide = width > 600;
+
+                          return isWide
+                              ? GridView.builder(
+                            gridDelegate:
+                            const SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: 2,
+                              mainAxisSpacing: 16,
+                              crossAxisSpacing: 16,
+                              childAspectRatio: 3.5,
+                            ),
+                            itemCount: mappedDeliveries.length,
+                            itemBuilder: (context, index) {
+                              final d = mappedDeliveries[index];
+                              return deliveryCard(
+                                context: context,
+                                image: d['image']!,
+                                status: d['status']!,
+                                code: d['code']!,
+                                date: d['date']!,
+                                time: d['time']!,
+                                address: d['address']!,
+                              );
+                            },
+                          )
+                              : ListView.builder(
+                            padding: EdgeInsets.zero,
                             itemCount: mappedDeliveries.length,
                             itemBuilder: (context, index) {
                               final d = mappedDeliveries[index];
@@ -183,7 +209,6 @@ class _DeliveryHistoryState extends State<DeliveryHistory> {
                 ),
               ),
             ),
-
           ],
         ),
       ),

@@ -1,13 +1,9 @@
 import 'package:delivery/gmailauthhandler.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'dart:io';
 import 'dart:convert';
 import 'profile.dart';
-import 'changepassword.dart';
 import 'login_page.dart';
 
 class ProfilePage extends StatefulWidget {
@@ -18,11 +14,9 @@ class ProfilePage extends StatefulWidget {
 }
 
 class _ProfilePageState extends State<ProfilePage> {
-  String? _profileImageUrl; // Can be URL or Base64
+  String? _profileImageUrl;
   String? _displayName;
   final user = FirebaseAuth.instance.currentUser;
-
-  /// Toggle for free-tier testing (Base64) vs production (Storage URL)
   final bool useBase64ForTesting = true;
   bool _isLoading = true;
 
@@ -32,24 +26,15 @@ class _ProfilePageState extends State<ProfilePage> {
     _loadUserProfile();
   }
 
-  // Callback function to update the image
   void _updateProfileImage(String newImage) {
-    setState(() {
-      _profileImageUrl = newImage;
-    });
+    setState(() => _profileImageUrl = newImage);
   }
 
-  // Helper getter for CircleAvatar image
   ImageProvider? get profileImageProvider {
     if (_profileImageUrl == null) return null;
     return useBase64ForTesting
         ? Image.memory(base64Decode(_profileImageUrl!)).image
         : NetworkImage(_profileImageUrl!);
-  }
-
-  // Helper method for showing SnackBars
-  void showSnack(String msg) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
   Future<void> _loadUserProfile() async {
@@ -59,17 +44,13 @@ class _ProfilePageState extends State<ProfilePage> {
     }
 
     try {
-      final doc = await FirebaseFirestore.instance
-          .collection("users")
-          .doc(user!.uid)
-          .get();
+      final doc = await FirebaseFirestore.instance.collection("users").doc(user!.uid).get();
 
       if (doc.exists) {
         final data = doc.data()!;
         setState(() {
-          _profileImageUrl = (data["profileImage"] as String?)?.isNotEmpty == true
-              ? data["profileImage"]
-              : null;
+          _profileImageUrl =
+          (data["profileImage"] as String?)?.isNotEmpty == true ? data["profileImage"] : null;
           _displayName = data["name"] as String?;
           _isLoading = false;
         });
@@ -84,113 +65,101 @@ class _ProfilePageState extends State<ProfilePage> {
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator(color: Colors.green)),
+      );
+    }
+
+    final screenHeight = MediaQuery.of(context).size.height;
+    final screenWidth = MediaQuery.of(context).size.width;
+
     return Scaffold(
       backgroundColor: const Color(0xFF1B6C07),
-      body: Column(
-        children: [
-          // Header
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 30),
-            child: Column(
-              children: [
-                const SizedBox(height: 70),
-                CircleAvatar(
-                  radius: 63,
-                  backgroundColor: Colors.white,
-                  backgroundImage: profileImageProvider,
-                  child: profileImageProvider == null
-                      ? const Icon(
-                    Icons.person,
-                    size: 87,
-                    color: Color(0xFF1B6C07),
-                  )
-                      : null,
-                ),
-                const SizedBox(height: 15),
-                Text(
-                  _displayName ?? 'User Name',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 5),
-                Text(
-                  user?.email ?? 'email',
-                  style: const TextStyle(color: Colors.white70, fontSize: 14),
-                ),
-              ],
-            ),
-          ),
-
-          // White section
-          Expanded(
-            child: Container(
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.only(
-                  topLeft: Radius.circular(30),
-                  topRight: Radius.circular(30),
-                ),
-              ),
-              child: ListView(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: 30,
-                ),
+      body: SafeArea(
+        child: Column(
+          children: [
+            // Header (fixed size)
+            Padding(
+              padding: EdgeInsets.symmetric(vertical: screenHeight * 0.03),
+              child: Column(
                 children: [
-                  ListTile(
-                    leading: const Icon(
-                      Icons.person_outline,
-                      color: Color(0xFF1B6C07),
-                    ),
-                    title: const Text('Profile'),
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => Profile(
-                            onImageChanged: _updateProfileImage, // pass callback
-                          ),
-                        ),
-                      );
-                    },
+                  CircleAvatar(
+                    radius: screenWidth * 0.16,
+                    backgroundColor: Colors.white,
+                    backgroundImage: profileImageProvider,
+                    child: profileImageProvider == null
+                        ? Icon(Icons.person, size: screenWidth * 0.22, color: const Color(0xFF1B6C07))
+                        : null,
                   ),
-                  const Divider(),
-                  ListTile(
-                    leading: const Icon(
-                      Icons.vpn_key_outlined,
-                      color: Color(0xFF1B6C07),
-                    ),
-                    title: const Text('Change Password'),
-                    onTap: () {
-                      Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (context) => const GmailAuthHandler()),
-                      );
-                    },
+                  SizedBox(height: screenHeight * 0.015),
+                  Text(
+                    _displayName ?? 'User Name',
+                    style: TextStyle(
+                        color: Colors.white, fontSize: screenHeight * 0.028, fontWeight: FontWeight.bold),
                   ),
-                  const Divider(),
-                  ListTile(
-                    leading: const Icon(Icons.logout, color: Color(0xFF1B6C07)),
-                    title: const Text('Log Out'),
-                    onTap: () async {
-                      await FirebaseAuth.instance.signOut();
-                      Navigator.pushReplacement(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const LoginPage(),
-                        ),
-                      );
-                    },
+                  SizedBox(height: screenHeight * 0.005),
+                  Text(
+                    user?.email ?? 'email',
+                    style: TextStyle(color: Colors.white70, fontSize: screenHeight * 0.018),
                   ),
                 ],
               ),
             ),
-          ),
-        ],
+
+            // White section (expand to fill remaining space)
+            Expanded(
+              child: Container(
+                width: double.infinity,
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.only(
+                    topLeft: Radius.circular(30),
+                    topRight: Radius.circular(30),
+                  ),
+                ),
+                child: SingleChildScrollView(
+                  padding: EdgeInsets.symmetric(horizontal: screenWidth * 0.05, vertical: screenHeight * 0.03),
+                  child: Column(
+                    children: [
+                      ListTile(
+                        leading: Icon(Icons.person_outline, color: const Color(0xFF1B6C07), size: screenWidth * 0.07),
+                        title: Text('Profile', style: TextStyle(fontSize: screenHeight * 0.022)),
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (context) => Profile(onImageChanged: _updateProfileImage)),
+                          );
+                        },
+                      ),
+                      Divider(height: screenHeight * 0.01, thickness: 1),
+                      ListTile(
+                        leading: Icon(Icons.vpn_key_outlined, color: const Color(0xFF1B6C07), size: screenWidth * 0.07),
+                        title: Text('Change Password', style: TextStyle(fontSize: screenHeight * 0.022)),
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (context) => const GmailAuthHandler()),
+                          );
+                        },
+                      ),
+                      Divider(height: screenHeight * 0.01, thickness: 1),
+                      ListTile(
+                        leading: Icon(Icons.logout, color: const Color(0xFF1B6C07), size: screenWidth * 0.07),
+                        title: Text('Log Out', style: TextStyle(fontSize: screenHeight * 0.022)),
+                        onTap: () async {
+                          await FirebaseAuth.instance.signOut();
+                          Navigator.pushReplacement(
+                              context, MaterialPageRoute(builder: (context) => const LoginPage()));
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
