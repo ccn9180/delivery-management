@@ -866,7 +866,16 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
     }
 
     if (_errorMessage.isNotEmpty) {
-      return Center(child: Text(_errorMessage));
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24.0),
+          child: Text(
+            _errorMessage,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+          ),
+        ),
+      );
     }
 
     if (_currentPosition == null) {
