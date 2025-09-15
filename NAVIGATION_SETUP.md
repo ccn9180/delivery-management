@@ -45,31 +45,30 @@ Your Google Map now includes real-time navigation functionality that allows you 
 
 ## Features
 
-### Navigation Controls
-- **Start Navigation**: Green button to begin navigation to delivery destination
-- **Stop Navigation**: Red button to stop navigation and clear route
-- **Refresh Route**: Blue button to recalculate route from current position
+### Navigation Behavior
+- **Auto-start**: Navigation starts automatically from your current location when the map opens.
+- **Stop Navigation**: Red button to stop navigation and clear route.
+- **Refresh Route**: Blue button to recalculate route from current position.
 
 ### Real-Time Updates
-- Location tracking updates every 5 meters
-- Camera follows your position during navigation
-- Route markers update as you move
-- Smooth camera animations
+- Location tracking updates every `Config.locationUpdateDistance` meters (default 5 m).
+- Camera follows your position and bearing during navigation.
+- Route markers update as you move.
+- Smooth camera animations.
 
 ### Map Features
-- Blue polyline shows the route
-- Green marker: Your current location
-- Red marker: Delivery destination
-- Real-time location updates
-- Automatic camera fitting to show entire route
+- Blue polyline shows the route.
+- Green marker: Your current location.
+- Red marker: Delivery destination.
+- Real-time location updates.
+- Automatic camera fitting to show entire route.
 
 ## Usage
 
-1. **Open the Map**: Navigate to the Google Map page
-2. **Grant Permissions**: Allow location access when prompted
-3. **Start Navigation**: Tap the green "Start Navigation" button
-4. **Follow Route**: The map will show your route and track your movement
-5. **Stop Navigation**: Tap the red "Stop Navigation" button when done
+1. **Open the Map**: Navigate to the Google Map page.
+2. **Grant Permissions**: Allow location access when prompted.
+3. **Follow Route**: Navigation starts automatically from your current location to the destination configured or passed in.
+4. **Stop Navigation**: Tap the red "Stop Navigation" button when done.
 
 ## Troubleshooting
 
@@ -85,19 +84,22 @@ Your Google Map now includes real-time navigation functionality that allows you 
 ## Customization
 
 ### Change Destination
-Update the coordinates in `lib/config.dart`:
+Update the default destination in `lib/config.dart` (used when a page doesn't pass a specific `deliveryLocation`):
 ```dart
 static const double deliveryLatitude = 5.4164;
 static const double deliveryLongitude = 100.3327;
 ```
 
 ### Adjust Location Updates
-Modify the update frequency in `lib/config.dart`:
+Modify the update frequency and behavior in `lib/config.dart`:
 ```dart
 static const double locationUpdateDistance = 5.0; // meters
+static const LocationAccuracy locationAccuracy = LocationAccuracy.high;
+static const bool autoStartNavigation = true; // start navigation when map opens
 ```
 
 ### Styling
 - Modify colors in the `_calculateRoute` method
 - Update button styles in the bottom container
 - Customize marker icons and info windows
+
