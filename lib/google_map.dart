@@ -51,7 +51,7 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
   bool _isFollowMode = true; // camera follows heading like turn-by-turn
   bool _userInteracting = false;
   BitmapDescriptor? _navArrowIcon;
-  
+
   // Navigation direction variables
   String _currentDirection = "Head towards destination";
   double _currentBearing = 0.0;
@@ -60,7 +60,7 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
 
   // Default delivery destination from configuration (used if widget doesn't pass one)
   static final LatLng _defaultDestination =
-      LatLng(Config.deliveryLatitude, Config.deliveryLongitude);
+  LatLng(Config.deliveryLatitude, Config.deliveryLongitude);
 
   @override
   void initState() {
@@ -72,49 +72,49 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
 
   Future<void> _initializeLocationAndMap() async {
     if (!mounted) return;
-    
+
     try {
-    setState(() {
-      _isLoading = true;
-      _errorMessage = '';
-    });
+      setState(() {
+        _isLoading = true;
+        _errorMessage = '';
+      });
 
-    _locationServiceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!_locationServiceEnabled) {
-      if (mounted) {
-        setState(() {
-            _errorMessage = 'Location services are disabled. Please enable them in your device settings.';
-          _isLoading = false;
-        });
-      }
-      return;
-    }
-
-    _locationPermission = await Geolocator.checkPermission();
-    if (_locationPermission == LocationPermission.denied) {
-      _locationPermission = await Geolocator.requestPermission();
-      if (_locationPermission == LocationPermission.denied) {
+      _locationServiceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!_locationServiceEnabled) {
         if (mounted) {
           setState(() {
-              _errorMessage = 'Location permission denied. Please grant permission to use this feature.';
+            _errorMessage = 'Location services are disabled. Please enable them in your device settings.';
             _isLoading = false;
           });
         }
         return;
       }
-    }
 
-    if (_locationPermission == LocationPermission.deniedForever) {
-      if (mounted) {
-        setState(() {
-            _errorMessage = 'Location permission is permanently denied. Please enable it from the app settings.';
-          _isLoading = false;
-        });
+      _locationPermission = await Geolocator.checkPermission();
+      if (_locationPermission == LocationPermission.denied) {
+        _locationPermission = await Geolocator.requestPermission();
+        if (_locationPermission == LocationPermission.denied) {
+          if (mounted) {
+            setState(() {
+              _errorMessage = 'Location permission denied. Please grant permission to use this feature.';
+              _isLoading = false;
+            });
+          }
+          return;
+        }
       }
-      return;
-    }
 
-    await _getCurrentLocation();
+      if (_locationPermission == LocationPermission.deniedForever) {
+        if (mounted) {
+          setState(() {
+            _errorMessage = 'Location permission is permanently denied. Please enable it from the app settings.';
+            _isLoading = false;
+          });
+        }
+        return;
+      }
+
+      await _getCurrentLocation();
       // 🚀 Auto-start navigation after current location is found (toggleable via Config)
       if (mounted && _currentPosition != null && Config.autoStartNavigation) {
         _startNavigation();
@@ -174,7 +174,7 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
         bearing: _currentBearing,
         tilt: 60,
       );
-      
+
       _mapController!.animateCamera(
         CameraUpdate.newCameraPosition(cameraPosition),
       );
@@ -266,10 +266,10 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
 
   Future<void> _startNavigation() async {
     if (_currentPosition == null) return;
-    
+
     // Use delivery location if available, otherwise use configured default
     LatLng destination = widget.deliveryLocation ?? _defaultDestination;
-    
+
     await _prepareNavArrowIcon();
 
     setState(() {
@@ -277,7 +277,7 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
       _isCalculatingRoute = false; // Don't calculate, just show direction
       _destination = destination;
     });
-    
+
     // Show route direction using Google Directions API
     _showRouteDirection(_currentPosition!, destination);
   }
@@ -331,11 +331,11 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
     try {
       // Get real road-based route from Google Directions API
       List<LatLng> roadPoints = await _getRoadBasedRoute(origin, destination);
-      
+
       if (roadPoints.isNotEmpty) {
         _routePoints = roadPoints;
         _currentRouteIndex = 0;
-        
+
         // Create navigation-style polylines (underlay + main route + inner glow)
         final Polyline underlay = Polyline(
           polylineId: const PolylineId("route_underlay"),
@@ -421,10 +421,10 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
           'key=$_googleApiKey';
 
       final response = await http.get(Uri.parse(url));
-      
+
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        
+
         if (data['status'] == 'OK' && data['routes'].isNotEmpty) {
           // Prefer detailed steps to avoid straight-line artifacts
           final List<LatLng> points = [];
@@ -453,7 +453,7 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
     } catch (e) {
       debugPrint('Error getting directions: $e');
     }
-    
+
     return [];
   }
 
@@ -462,7 +462,7 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
     List<LatLng> fallbackPoints = _createDetailedRoute(origin, destination);
     _routePoints = fallbackPoints;
     _currentRouteIndex = 0;
-    
+
     final Polyline underlay = Polyline(
       polylineId: const PolylineId("route_underlay"),
       color: Colors.white,
@@ -527,17 +527,17 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
   // Create a more detailed route with intermediate points for Google Maps-like navigation
   List<LatLng> _createDetailedRoute(LatLng origin, LatLng destination) {
     List<LatLng> points = [origin];
-    
+
     // Calculate intermediate points for a more realistic route
     double latDiff = destination.latitude - origin.latitude;
     double lngDiff = destination.longitude - origin.longitude;
-    
+
     // Add more intermediate points for smoother route (12-15 points)
     for (int i = 1; i <= 12; i++) {
       double factor = i / 13.0;
       double lat = origin.latitude + (latDiff * factor);
       double lng = origin.longitude + (lngDiff * factor);
-      
+
       // Add realistic curves and turns like Google Maps
       if (i >= 2 && i <= 4) {
         // First curve section
@@ -552,10 +552,10 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
         double curveOffset = 0.0015 * sin((i - 9) * pi / 2); // Gentle final curve
         lng += curveOffset;
       }
-      
+
       points.add(LatLng(lat, lng));
     }
-    
+
     points.add(destination);
     return points;
   }
@@ -563,11 +563,11 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
   // Update navigation direction based on current position and route
   void _updateNavigationDirection() {
     if (_currentPosition == null || _routePoints.length < 2) return;
-    
+
     // Find the closest point on the route
     double minDistance = double.infinity;
     int closestIndex = 0;
-    
+
     for (int i = 0; i < _routePoints.length; i++) {
       double distance = _calculateDistanceInKm(_currentPosition!, _routePoints[i]);
       if (distance < minDistance) {
@@ -575,9 +575,9 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
         closestIndex = i;
       }
     }
-    
+
     _currentRouteIndex = closestIndex;
-    
+
     // Calculate bearing to next point
     if (closestIndex < _routePoints.length - 1) {
       LatLng nextPoint = _routePoints[closestIndex + 1];
@@ -631,7 +631,7 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
   // Calculate distance in kilometers using Haversine formula
   double _calculateDistanceInKm(LatLng origin, LatLng destination) {
     const double earthRadius = 6371; // Earth's radius in kilometers
-    
+
     double lat1Rad = origin.latitude * (pi / 180);
     double lat2Rad = destination.latitude * (pi / 180);
     double deltaLatRad = (destination.latitude - origin.latitude) * (pi / 180);
@@ -639,7 +639,7 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
 
     double a = sin(deltaLatRad / 2) * sin(deltaLatRad / 2) +
         cos(lat1Rad) * cos(lat2Rad) *
-        sin(deltaLngRad / 2) * sin(deltaLngRad / 2);
+            sin(deltaLngRad / 2) * sin(deltaLngRad / 2);
     double c = 2 * asin(sqrt(a));
 
     return earthRadius * c;
@@ -653,15 +653,15 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
 
     double distance = _calculateDistanceInKm(_currentPosition!, _destination!);
     int baseMinutes = (distance * 2.5).round(); // Base time: 2.5 min per km
-    
+
     // Add extra time based on delivery items count
     int itemCount = widget.deliveryItems?.length ?? 1;
     int extraMinutes = (itemCount * 2).clamp(0, 15); // 2 min per item, max 15 min
-    
+
     int totalMinutes = baseMinutes + extraMinutes;
     int minTime = (totalMinutes * 0.8).round(); // 80% of calculated time
     int maxTime = (totalMinutes * 1.2).round(); // 120% of calculated time
-    
+
     return "Estimated Time: $minTime-$maxTime minutes";
   }
 
@@ -877,7 +877,7 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
       children: [
         GoogleMap(
           initialCameraPosition: CameraPosition(
-            target: _pointAheadOf(_currentPosition!, 35), 
+            target: _pointAheadOf(_currentPosition!, 35),
             zoom: 25,
             bearing: _currentBearing,
             tilt: 80,
@@ -915,7 +915,7 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
             _moveCameraToCurrentPosition();
           },
         ),
-        
+
         // Compass-like navigation indicator (top right)
         if (_isNavigating)
           Positioned(
@@ -991,7 +991,7 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
               ],
             ),
           ),
-        
+
         // Route calculation loading indicator
         if (_isCalculatingRoute)
           const Positioned(
@@ -1107,7 +1107,7 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
                   ],
                 ),
                 const SizedBox(height: 10),
-                
+
                 // Navigation status indicator
                 if (_isNavigating) ...[
                   Container(
@@ -1134,7 +1134,7 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
                   ),
                   const SizedBox(height: 10),
                 ],
-                
+
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.white,

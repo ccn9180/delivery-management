@@ -6,10 +6,8 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'firebase_options.dart';
 import 'homepage.dart';
 import 'login_page.dart';
-import 'google_map.dart';
-import 'dart:io'; //for platform
+import 'dart:io';
 import 'package:google_maps_flutter_android/google_maps_flutter_android.dart';
-
 
 class Wrapper extends StatelessWidget {
   const Wrapper({super.key});
@@ -33,40 +31,54 @@ class Wrapper extends StatelessWidget {
   }
 }
 
-
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // This is the correct place to set it, before Firebase.initializeApp and runApp
-  if (Platform.isAndroid) {
-    // Choose one of these lines based on your testing:
-    // AndroidGoogleMapsFlutter.useAndroidViewSurface = true; // Try this first (newer SurfaceView based Hybrid Composition)
-    AndroidGoogleMapsFlutter.useAndroidViewSurface = false; // Or try this (older Virtual Display) if the above has issues
 
-    // You might also need to initialize the Android-specific part of the maps plugin
-    // if you are using a recent version and want to explicitly set the renderer.
-    // However, just setting useAndroidViewSurface might be enough for what you're trying.
-    // final GoogleMapsFlutterAndroid mapsImplementation = GoogleMapsFlutterAndroid();
-    // mapsImplementation.initializeWithRenderer(AndroidMapRenderer.latest);
+  if (Platform.isAndroid) {
+    AndroidGoogleMapsFlutter.useAndroidViewSurface = false;
   }
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
   runApp(const MyApp());
 }
 
-
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
+
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      title: 'SWPS',
-      theme: ThemeData(
-        primarySwatch: Colors.green,
-      ),
+    return FutureBuilder(
+      future: Firebase.apps.isEmpty
+          ? Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      )
+          : Future.value(Firebase.app()),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.done) {
+          return MaterialApp(
+            debugShowCheckedModeBanner: false,
+            title: 'SWPS',
+            theme: ThemeData(
+              primarySwatch: Colors.green,
+            ),
+            home: const Wrapper(),
+          );
+        }
 
-      home: const Wrapper(),
+        if (snapshot.hasError) {
+          return MaterialApp(
+            home: Scaffold(
+              body: Center(
+                child: Text('Firebase initialization error: ${snapshot.error}'),
+              ),
+            ),
+          );
+        }
+
+        return const MaterialApp(
+          home: Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          ),
+        );
+      },
     );
   }
 }
