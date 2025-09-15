@@ -1,3 +1,4 @@
+import 'package:delivery/welcome.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -26,7 +27,7 @@ class Wrapper extends StatelessWidget {
         if (snapshot.hasData) {
           return const HomePage(); // user logged in
         }
-        return const LoginPage(); // user not logged in
+        return const WelcomePage(); // user not logged in
       },
     );
   }
