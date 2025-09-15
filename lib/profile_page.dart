@@ -6,6 +6,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:io';
 import 'dart:convert';
+import 'profile.dart';
 import 'changepassword.dart';
 import 'login_page.dart';
 
@@ -17,13 +18,13 @@ class ProfilePage extends StatefulWidget {
 }
 
 class _ProfilePageState extends State<ProfilePage> {
-  File? _image;
   String? _profileImageUrl; // Can be URL or Base64
   String? _displayName;
   final user = FirebaseAuth.instance.currentUser;
 
   /// Toggle for free-tier testing (Base64) vs production (Storage URL)
   final bool useBase64ForTesting = true;
+  bool _isLoading = true;
 
   @override
   void initState() {
@@ -31,9 +32,15 @@ class _ProfilePageState extends State<ProfilePage> {
     _loadUserProfile();
   }
 
+  // Callback function to update the image
+  void _updateProfileImage(String newImage) {
+    setState(() {
+      _profileImageUrl = newImage;
+    });
+  }
+
   // Helper getter for CircleAvatar image
   ImageProvider? get profileImageProvider {
-    if (_image != null) return FileImage(_image!);
     if (_profileImageUrl == null) return null;
     return useBase64ForTesting
         ? Image.memory(base64Decode(_profileImageUrl!)).image
@@ -46,68 +53,32 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Future<void> _loadUserProfile() async {
-    if (user == null) return;
-
-    final doc = await FirebaseFirestore.instance
-        .collection("users")
-        .doc(user!.uid)
-        .get();
-
-    if (doc.exists) {
-      final data = doc.data()!;
-      setState(() {
-        _profileImageUrl = (data["profileImage"] as String?)?.isNotEmpty == true
-            ? data["profileImage"]
-            : null;
-        _displayName = data["name"] as String?;
-      });
+    if (user == null) {
+      setState(() => _isLoading = false);
+      return;
     }
-  }
-
-  Future<void> _pickImage() async {
-    final picker = ImagePicker();
-    final pickedFile = await picker.pickImage(source: ImageSource.gallery);
-
-    if (pickedFile != null) {
-      setState(() => _image = File(pickedFile.path));
-      await _uploadImage();
-    }
-  }
-
-  Future<void> _uploadImage() async {
-    if (_image == null || user == null) return;
 
     try {
-      String? imageToSave;
+      final doc = await FirebaseFirestore.instance
+          .collection("users")
+          .doc(user!.uid)
+          .get();
 
-      if (useBase64ForTesting) {
-        final bytes = await _image!.readAsBytes();
-        imageToSave = base64Encode(bytes);
+      if (doc.exists) {
+        final data = doc.data()!;
+        setState(() {
+          _profileImageUrl = (data["profileImage"] as String?)?.isNotEmpty == true
+              ? data["profileImage"]
+              : null;
+          _displayName = data["name"] as String?;
+          _isLoading = false;
+        });
       } else {
-        final storageRef = FirebaseStorage.instance
-            .ref()
-            .child("profile_images")
-            .child("${user!.uid}.jpg");
-
-        final uploadTask = await storageRef.putFile(_image!);
-
-        if (uploadTask.state == TaskState.success) {
-          imageToSave = await storageRef.getDownloadURL();
-        } else {
-          throw "Upload failed";
-        }
+        setState(() => _isLoading = false);
       }
-
-      // Save to Firestore
-      await FirebaseFirestore.instance.collection("users").doc(user!.uid).set({
-        "profileImage": imageToSave,
-        "name": _displayName ?? user!.displayName ?? "User Name",
-      }, SetOptions(merge: true));
-
-      setState(() => _profileImageUrl = imageToSave);
-      showSnack("Profile image updated!");
     } catch (e) {
-      showSnack("Error uploading image: $e");
+      print("Error loading profile: $e");
+      setState(() => _isLoading = false);
     }
   }
 
@@ -124,20 +95,17 @@ class _ProfilePageState extends State<ProfilePage> {
             child: Column(
               children: [
                 const SizedBox(height: 70),
-                GestureDetector(
-                  onTap: _pickImage,
-                  child: CircleAvatar(
-                    radius: 63,
-                    backgroundColor: Colors.white,
-                    backgroundImage: profileImageProvider,
-                    child: profileImageProvider == null
-                        ? const Icon(
-                            Icons.person,
-                            size: 87,
-                            color: Color(0xFF1B6C07),
-                          )
-                        : null,
-                  ),
+                CircleAvatar(
+                  radius: 63,
+                  backgroundColor: Colors.white,
+                  backgroundImage: profileImageProvider,
+                  child: profileImageProvider == null
+                      ? const Icon(
+                    Icons.person,
+                    size: 87,
+                    color: Color(0xFF1B6C07),
+                  )
+                      : null,
                 ),
                 const SizedBox(height: 15),
                 Text(
@@ -179,7 +147,16 @@ class _ProfilePageState extends State<ProfilePage> {
                       color: Color(0xFF1B6C07),
                     ),
                     title: const Text('Profile'),
-                    onTap: () {},
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => Profile(
+                            onImageChanged: _updateProfileImage, // pass callback
+                          ),
+                        ),
+                      );
+                    },
                   ),
                   const Divider(),
                   ListTile(
