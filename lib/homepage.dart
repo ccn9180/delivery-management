@@ -414,6 +414,7 @@ Widget deliveryCard({
       ),
       elevation: 3,
       shadowColor: Colors.grey.shade100,
+      clipBehavior: Clip.hardEdge,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -511,37 +512,44 @@ Widget deliveryCard({
                     children: [
                       const SizedBox(height: 14),
                       Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text(
-                            '# $code',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14.5,
+                          Expanded(
+                            child: Text(
+                              '# $code',
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14.5,
+                              ),
                             ),
                           ),
-                          const Spacer(),
                           if (status == 'On-Going' || status == 'Delivered')
-                            Transform.translate(
-                              offset: const Offset(0, -14.5),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 3,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: status == 'Delivered'
-                                      ? Colors.green.shade100
-                                      : Colors.blue.shade100,
-                                  borderRadius: BorderRadius.circular(20),
-                                ),
-                                child: Text(
-                                  status,
-                                  style: TextStyle(
-                                    fontSize: 12,
+                            ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 120),
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 3,
+                                  ),
+                                  decoration: BoxDecoration(
                                     color: status == 'Delivered'
-                                        ? Colors.green
-                                        : Colors.blueGrey,
-                                    fontWeight: FontWeight.bold,
+                                        ? Colors.green.shade100
+                                        : Colors.blue.shade100,
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: Text(
+                                    status,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: status == 'Delivered'
+                                          ? Colors.green
+                                          : Colors.blueGrey,
+                                      fontWeight: FontWeight.bold,
+                                    ),
                                   ),
                                 ),
                               ),
@@ -549,15 +557,27 @@ Widget deliveryCard({
                         ],
                       ),
                       const SizedBox(height: 8),
-                      Row(
+                      Wrap(
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        spacing: 12,
+                        runSpacing: 4,
                         children: [
-                          const Icon(Icons.calendar_today, size: 16),
-                          const SizedBox(width: 6),
-                          Text(date, style: TextStyle(fontSize: 12)),
-                          const SizedBox(width: 12),
-                          const Icon(Icons.access_time, size: 16),
-                          const SizedBox(width: 6),
-                          Text(time, style: TextStyle(fontSize: 12)),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.calendar_today, size: 16),
+                              const SizedBox(width: 6),
+                              Text(date, style: const TextStyle(fontSize: 12)),
+                            ],
+                          ),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.access_time, size: 16),
+                              const SizedBox(width: 6),
+                              Text(time, style: const TextStyle(fontSize: 12)),
+                            ],
+                          ),
                         ],
                       ),
                     ],
@@ -574,7 +594,12 @@ Widget deliveryCard({
                 const Icon(Icons.location_on, size: 18),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: Text(address, style: const TextStyle(fontSize: 11.5)),
+                  child: Text(
+                    address,
+                    style: const TextStyle(fontSize: 11.5),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               ],
             ),
