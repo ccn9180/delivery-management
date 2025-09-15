@@ -131,7 +131,7 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
         title: const Padding(
           padding: EdgeInsets.only(top: 12),
           child: Text(
-            "Change Password",
+            "Change Password Testing",
             style: TextStyle(
               color: Colors.black,
               fontWeight: FontWeight.w600,
