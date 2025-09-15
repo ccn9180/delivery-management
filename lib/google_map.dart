@@ -1146,7 +1146,7 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
                           content: Text('Delivery status updated')),
                     );
                   },
-                  child: const Text("Updated"),
+                  child: const Text("Update"),
                 )
               ],
             ),
