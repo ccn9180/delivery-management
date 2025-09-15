@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'dart:math';
 import 'dart:ui' as ui;
 import 'dart:typed_data';
+import 'package:delivery/changepassword.dart';
+import 'package:delivery/confirmation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show ByteData;
 import 'package:google_maps_flutter/google_maps_flutter.dart';
@@ -1336,8 +1338,9 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
                           minimumSize: const Size.fromHeight(36),
                           foregroundColor: Colors.green),
                       onPressed: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Delivery status updated')),
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => const ConfirmationPage()),
                         );
                       },
                       child: const Text("Update"),
