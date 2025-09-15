@@ -13,6 +13,8 @@ class _LoginPageState extends State<LoginPage> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _emailFocus = FocusNode();
+  final _passwordFocus = FocusNode();
 
   bool _passwordVisible = false;
   bool _isLoading = false;
@@ -22,10 +24,10 @@ class _LoginPageState extends State<LoginPage> {
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
+    _emailFocus.dispose();
+    _passwordFocus.dispose();
     super.dispose();
   }
-
-
 
   Future<void> _login() async {
     if (!_formKey.currentState!.validate()) return;
@@ -77,7 +79,6 @@ class _LoginPageState extends State<LoginPage> {
 
   void _forgotPassword() async {
     if (_emailController.text.isEmpty) {
-      // Ask user to enter email first
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Please enter your email first")),
       );
@@ -103,10 +104,11 @@ class _LoginPageState extends State<LoginPage> {
       );
     }
   }
-
-
   @override
   Widget build(BuildContext context) {
+    final screenHeight = MediaQuery.of(context).size.height;
+    final screenWidth = MediaQuery.of(context).size.width;
+
     return Scaffold(
       body: Container(
         width: double.infinity,
@@ -121,159 +123,199 @@ class _LoginPageState extends State<LoginPage> {
           ),
         ),
         child: SafeArea(
-          child: SingleChildScrollView(
-            child: ConstrainedBox(
-              constraints: BoxConstraints(
-                minHeight: MediaQuery.of(context).size.height,
-              ),
-              child: IntrinsicHeight(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 35.0, vertical: 20.0),
-                  child: Form(
-                    key: _formKey,
-                    child: Column(
-                      children: <Widget>[
-                        const SizedBox(height: 150),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              return SingleChildScrollView(
+                padding: EdgeInsets.symmetric(
+                  horizontal: screenWidth * 0.08,
+                  vertical: 12,
+                ),
+                reverse: true, // ensures scroll moves up when keyboard opens
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    minHeight: constraints.maxHeight,
+                  ),
+                  child: IntrinsicHeight(
+                    child: Padding(
+                      // Push content up when keyboard appears
+                      padding: EdgeInsets.only(
+                        bottom: MediaQuery.of(context).viewInsets.bottom,
+                      ),
+                      child: Column(
+                        children: [
+                          SizedBox(height: screenHeight * 0.15),
 
-                        // Logo
-                        Image.asset('assets/images/SWPS.png', height: 160),
-                        const SizedBox(height: 40),
-
-                        const Text(
-                          "Login to SWPS",
-                          style: TextStyle(
-                            fontSize: 26,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF1B6C07),
+                          // Logo
+                          Image.asset(
+                            'assets/images/SWPS.png',
+                            height: screenHeight * 0.18,
                           ),
-                        ),
-                        const SizedBox(height: 25),
+                          SizedBox(height: screenHeight * 0.03),
 
-                        // Email
-                        TextFormField(
-                          controller: _emailController,
-                          keyboardType: TextInputType.emailAddress,
-                          decoration: _inputDecoration("Email"),
-                          validator: (value) {
-                            if (value == null || value.isEmpty) {
-                              return 'Email is required';
-                            }
-                            if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(value)) {
-                              return 'Enter a valid email';
-                            }
-                            return null;
-                          },
-                        ),
-                        const SizedBox(height: 18),
-
-                        // Password
-                        TextFormField(
-                          controller: _passwordController,
-                          obscureText: !_passwordVisible,
-                          decoration: _inputDecoration("Password").copyWith(
-                            suffixIcon: IconButton(
-                              icon: Icon(
-                                _passwordVisible
-                                    ? Icons.visibility
-                                    : Icons.visibility_off,
-                                color: Colors.black54,
-                              ),
-                              onPressed: () {
-                                setState(() {
-                                  _passwordVisible = !_passwordVisible;
-                                });
-                              },
-                            ),
-                          ),
-                          validator: (value) {
-                            if (value == null || value.isEmpty) {
-                              return 'Password is required';
-                            }
-                            return null;
-                          },
-                        ),
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: TextButton(
-                            onPressed: _forgotPassword,
-                            child: const Text(
-                              'Forgot Password?',
-                              style: TextStyle(
-                                color: Color(0xFF1B6C07),
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ),
-
-                        const SizedBox(height: 40),
-
-                        // Login Button
-                        ElevatedButton(
-                          onPressed: _isLoading ? null : _login,
-                          style: ElevatedButton.styleFrom(
-                            elevation: 6,
-                            backgroundColor: const Color(0xFF1B6C07),
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 60, vertical: 15),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(25),
-                            ),
-                          ),
-                          child: _isLoading
-                              ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              color: Colors.white,
-                              strokeWidth: 2,
-                            ),
-                          )
-                              : const Text(
-                            'LOGIN',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 18,
-                            ),
-                          ),
-                        ),
-
-                        const SizedBox(height: 20),
-
-                        if (_errorMessage.isNotEmpty)
+                          // Title
                           Text(
-                            _errorMessage,
-                            style: const TextStyle(color: Colors.red, fontSize: 14),
-                            textAlign: TextAlign.center,
+                            "Login to SWPS",
+                            style: TextStyle(
+                              fontSize: screenHeight * 0.035,
+                              fontWeight: FontWeight.bold,
+                              color: const Color(0xFF1B6C07),
+                            ),
+                          ),
+                          SizedBox(height: screenHeight * 0.04),
+
+                          // Form
+                          Form(
+                            key: _formKey,
+                            child: Column(
+                              children: [
+                                // Email
+                                TextFormField(
+                                  controller: _emailController,
+                                  focusNode: _emailFocus,
+                                  textInputAction: TextInputAction.next,
+                                  keyboardType: TextInputType.emailAddress,
+                                  decoration:
+                                  _inputDecoration("Email", screenHeight),
+                                  validator: (value) {
+                                    if (value == null || value.isEmpty) {
+                                      return 'Email is required';
+                                    }
+                                    if (!RegExp(r'^[^@]+@[^@]+\.[^@]+')
+                                        .hasMatch(value)) {
+                                      return 'Enter a valid email';
+                                    }
+                                    return null;
+                                  },
+                                  onFieldSubmitted: (_) {
+                                    FocusScope.of(context)
+                                        .requestFocus(_passwordFocus);
+                                  },
+                                ),
+                                SizedBox(height: screenHeight * 0.02),
+
+                                // Password
+                                TextFormField(
+                                  controller: _passwordController,
+                                  focusNode: _passwordFocus,
+                                  obscureText: !_passwordVisible,
+                                  decoration: _inputDecoration(
+                                      "Password", screenHeight)
+                                      .copyWith(
+                                    suffixIcon: IconButton(
+                                      icon: Icon(
+                                        _passwordVisible
+                                            ? Icons.visibility
+                                            : Icons.visibility_off,
+                                        color: Colors.black54,
+                                      ),
+                                      onPressed: () {
+                                        setState(() {
+                                          _passwordVisible = !_passwordVisible;
+                                        });
+                                      },
+                                    ),
+                                  ),
+                                  validator: (value) {
+                                    if (value == null || value.isEmpty) {
+                                      return 'Password is required';
+                                    }
+                                    return null;
+                                  },
+                                  onFieldSubmitted: (_) => _login(),
+                                ),
+
+                                Align(
+                                  alignment: Alignment.centerRight,
+                                  child: TextButton(
+                                    onPressed: _forgotPassword,
+                                    child: const Text(
+                                      'Forgot Password?',
+                                      style: TextStyle(
+                                        color: Color(0xFF1B6C07),
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+
+                                SizedBox(height: screenHeight * 0.04),
+
+                                // Login button
+                                ElevatedButton(
+                                  onPressed: _isLoading ? null : _login,
+                                  style: ElevatedButton.styleFrom(
+                                    elevation: 6,
+                                    backgroundColor: const Color(0xFF1B6C07),
+                                    padding: EdgeInsets.symmetric(
+                                      horizontal: screenWidth * 0.15,
+                                      vertical: screenHeight * 0.02,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(25),
+                                    ),
+                                  ),
+                                  child: _isLoading
+                                      ? SizedBox(
+                                    width: screenWidth * 0.06,
+                                    height: screenWidth * 0.06,
+                                    child: const CircularProgressIndicator(
+                                      color: Colors.white,
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                      : Text(
+                                    'LOGIN',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: screenHeight * 0.025,
+                                    ),
+                                  ),
+                                ),
+
+                                SizedBox(height: screenHeight * 0.02),
+
+                                if (_errorMessage.isNotEmpty)
+                                  Text(
+                                    _errorMessage,
+                                    style: TextStyle(
+                                      color: Colors.red,
+                                      fontSize: screenHeight * 0.018,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
+                              ],
+                            ),
                           ),
 
-                        const Spacer(),
-                      ],
+                          Spacer(),
+                        ],
+                      ),
                     ),
                   ),
                 ),
-              ),
-            ),
+              );
+            },
           ),
         ),
       ),
     );
   }
 
-  InputDecoration _inputDecoration(String hint) {
+
+  InputDecoration _inputDecoration(String hint, double screenHeight) {
     return InputDecoration(
       hintText: hint,
-      hintStyle: const TextStyle(fontSize: 15, color: Colors.black54),
+      hintStyle: TextStyle(fontSize: screenHeight * 0.02, color: Colors.black54),
       filled: true,
-      fillColor: Colors.white, // stays consistent with gradient
+      fillColor: Colors.white,
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(18.0),
         borderSide: BorderSide.none,
       ),
-      contentPadding: const EdgeInsets.symmetric(
+      contentPadding: EdgeInsets.symmetric(
         horizontal: 20.0,
-        vertical: 14.0,
+        vertical: screenHeight * 0.02,
       ),
     );
   }

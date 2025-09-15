@@ -7,16 +7,17 @@ import 'package:image_picker/image_picker.dart';
 import 'package:image/image.dart' as img;
 
 class Profile extends StatefulWidget {
-  final void Function(String)? onImageChanged; // callback
+  final void Function(String)? onImageChanged; // callback for updated image
 
   const Profile({super.key, this.onImageChanged});
+
   @override
   State<Profile> createState() => _ProfileState();
 }
 
 class _ProfileState extends State<Profile> {
   File? _image;
-  String? _profileImageUrl; // Base64
+  String? _profileImageUrl; // Base64 string
   String? _displayName;
   String? _employeeID;
   String? _phoneNum;
@@ -58,7 +59,7 @@ class _ProfileState extends State<Profile> {
     }
   }
 
-  /// Get ImageProvider for CircleAvatar
+  // Image provider for CircleAvatar
   ImageProvider? get profileImageProvider {
     if (_image != null) return FileImage(_image!);
     if (_profileImageUrl == null) return null;
@@ -67,7 +68,7 @@ class _ProfileState extends State<Profile> {
         : null;
   }
 
-  /// Pick image, compress, convert to Base64, and update Firestore
+  // Pick and upload image
   Future<void> _pickAndUploadImage() async {
     final picker = ImagePicker();
     final pickedFile = await picker.pickImage(source: ImageSource.gallery);
@@ -76,20 +77,14 @@ class _ProfileState extends State<Profile> {
       setState(() => _image = File(pickedFile.path));
 
       try {
-        // Read image bytes
         final bytes = await _image!.readAsBytes();
-
-        // Decode and compress
         final imageDecoded = img.decodeImage(bytes);
         if (imageDecoded == null) throw "Failed to decode image";
 
-        final resized = img.copyResize(imageDecoded, width: 500); // Resize
-        final compressedBytes = img.encodeJpg(resized, quality: 60); // Compress
-
-        // Encode to Base64
+        final resized = img.copyResize(imageDecoded, width: 500);
+        final compressedBytes = img.encodeJpg(resized, quality: 60);
         final imageToSave = base64Encode(compressedBytes);
 
-        // Save to Firestore
         await FirebaseFirestore.instance
             .collection('users')
             .doc(user!.uid)
@@ -99,18 +94,12 @@ class _ProfileState extends State<Profile> {
           "employeeID": _employeeID,
         }, SetOptions(merge: true));
 
-        // Update UI
-        setState(() {
-          _profileImageUrl = imageToSave;
-        });
+        setState(() => _profileImageUrl = imageToSave);
+        widget.onImageChanged?.call(imageToSave);
 
-        if (widget.onImageChanged != null && imageToSave != null) {
-          widget.onImageChanged!(imageToSave);
-        }
-
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text("Profile image updated!")));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Profile image updated!")),
+        );
       } catch (e) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text("Error updating profile image: $e")),
@@ -122,7 +111,9 @@ class _ProfileState extends State<Profile> {
   @override
   Widget build(BuildContext context) {
     if (_displayName == null) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
     }
 
     return Scaffold(
@@ -139,15 +130,12 @@ class _ProfileState extends State<Profile> {
             icon: const Icon(Icons.arrow_back, color: Colors.black),
           ),
         ),
-        title: const Padding(
-          padding: EdgeInsets.only(top: 12),
-          child: Text(
-            "Profile",
-            style: TextStyle(
-              color: Colors.black,
-              fontWeight: FontWeight.bold,
-              fontSize: 24,
-            ),
+        title: const Text(
+          "Profile",
+          style: TextStyle(
+            color: Colors.black,
+            fontWeight: FontWeight.bold,
+            fontSize: 24,
           ),
         ),
       ),
@@ -157,91 +145,92 @@ class _ProfileState extends State<Profile> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const SizedBox(height: 30),
+
+            // Avatar with outline and edit icon
             Center(
               child: GestureDetector(
                 onTap: _pickAndUploadImage,
-                child: Stack(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(1.5),
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade300,
-                        shape: BoxShape.circle,
-                      ),
-                      child: CircleAvatar(
-                        radius: 80,
-                        backgroundColor: Colors.white,
-                        backgroundImage: profileImageProvider,
-                        child: profileImageProvider == null
-                            ? const Icon(
-                          Icons.person,
-                          size: 100,
-                          color: Color(0xFF1B6C07),
-                        )
-                            : null,
-                      ),
-                    ),
-                    Positioned(
-                      bottom: 0,
-                      right: 12,
-                      child: Container(
-                        padding: EdgeInsets.all(6),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.grey.shade300, width: 2),
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    double avatarSize = MediaQuery.of(context).size.width * 0.4; // 40% of screen width
+                    return Stack(
+                      alignment: Alignment.bottomRight,
+                      children: [
+                        Container(
+                          width: avatarSize,
+                          height: avatarSize,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.grey.shade300, width: 2),
+                          ),
+                          child: ClipOval(
+                            child: profileImageProvider != null
+                                ? Image(
+                              image: profileImageProvider!,
+                              fit: BoxFit.cover,
+                              width: avatarSize,
+                              height: avatarSize,
+                            )
+                                : Container(
+                              color: Colors.white,
+                              alignment: Alignment.center,
+                              child: Icon(
+                                Icons.person,
+                                size: avatarSize * 0.6,
+                                color: Color(0xFF1B6C07),
+                              ),
+                            ),
+                          ),
                         ),
-                        child: Icon(Icons.edit, size: 20, color: Colors.green),
-                      ),
-                    ),
-                  ],
+                        // Edit icon
+                        Positioned(
+                          bottom: 0,
+                          right: 0,
+                          child: Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.grey.shade300, width: 2),
+                            ),
+                            child: const Icon(Icons.edit, size: 20, color: Colors.green),
+                          ),
+                        ),
+                      ],
+                    );
+                  },
                 ),
               ),
             ),
-            const SizedBox(height: 60),
-            Table(
-              columnWidths: const {
-                0: FixedColumnWidth(200),
-                1: FlexColumnWidth(),
-              },
-              children: [
-                _buildTableRow('Name', _displayName ?? 'User Name'),
-                _buildSpacerRow(),
-                _buildTableRow('EmployeeID', _employeeID ?? 'Employee ID'),
-                _buildSpacerRow(),
-                _buildTableRow('Phone Number', _phoneNum ?? 'Phone Number'),
-                _buildSpacerRow(),
-                _buildTableRow(
-                  'Total Delivery Completed',
-                  (_deliveredCount?.toString() ?? '0'),
-                ),
-                _buildSpacerRow(),
-              ],
-            ),
+
+
+            SizedBox(height: MediaQuery.of(context).size.height * 0.03),
+
+            // Info cards
+            _buildInfoCard(Icons.person, "Name", _displayName ?? "User Name"),
+            _buildInfoCard(Icons.badge, "Employee ID", _employeeID ?? "Not set"),
+            _buildInfoCard(Icons.phone, "Phone Number", _phoneNum ?? "Not set"),
+            _buildInfoCard(Icons.local_shipping, "Total Deliveries", _deliveredCount?? 0),
           ],
         ),
       ),
     );
   }
 
-  TableRow _buildTableRow(String title, String value) {
-    return TableRow(
-      children: [
-        Text(
-          title,
-          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-        ),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: Text(value, style: const TextStyle(fontSize: 16)),
-        ),
-      ],
+  /// Generic info card
+  Widget _buildInfoCard(IconData icon, String title, dynamic value) {
+    return Card(
+      margin: EdgeInsets.symmetric(
+        vertical: MediaQuery.of(context).size.height * 0.01,
+        horizontal: 0,
+      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: ListTile(
+        leading: Icon(icon, color: Colors.green),
+        title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+        subtitle: Text(value?.toString() ?? "Not set"),
+      ),
     );
+  }
   }
 
-  TableRow _buildSpacerRow() {
-    return const TableRow(
-      children: [SizedBox(height: 15), SizedBox(height: 15)],
-    );
-  }
-}

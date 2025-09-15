@@ -186,12 +186,12 @@ class DeliveryListPage extends StatelessWidget {
                               strokeWidth: 6,
                               backgroundColor: Colors.grey.shade200,
                               valueColor: AlwaysStoppedAnimation<Color>(
-                                progress == 1.0 ? Colors.green : Colors.orange,
+                                delivered == total && total != 0 ? Colors.green : Colors.orange,
                               ),
                             ),
                           ),
                           Text(
-                            "${(progress * 100).toInt()}%",
+                            "$delivered/$total", // <-- fraction instead of percentage
                             style: const TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.bold,
@@ -414,7 +414,6 @@ Widget deliveryCard({
       ),
       elevation: 3,
       shadowColor: Colors.grey.shade100,
-      clipBehavior: Clip.hardEdge,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -512,44 +511,37 @@ Widget deliveryCard({
                     children: [
                       const SizedBox(height: 14),
                       Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Expanded(
-                            child: Text(
-                              '# $code',
-                              overflow: TextOverflow.ellipsis,
-                              maxLines: 1,
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 14.5,
-                              ),
+                          Text(
+                            '# $code',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14.5,
                             ),
                           ),
+                          const Spacer(),
                           if (status == 'On-Going' || status == 'Delivered')
-                            ConstrainedBox(
-                              constraints: const BoxConstraints(maxWidth: 120),
-                              child: FittedBox(
-                                fit: BoxFit.scaleDown,
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                    vertical: 3,
-                                  ),
-                                  decoration: BoxDecoration(
+                            Transform.translate(
+                              offset: const Offset(0, -14.5),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 3,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: status == 'Delivered'
+                                      ? Colors.green.shade100
+                                      : Colors.blue.shade100,
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: Text(
+                                  status,
+                                  style: TextStyle(
+                                    fontSize: 12,
                                     color: status == 'Delivered'
-                                        ? Colors.green.shade100
-                                        : Colors.blue.shade100,
-                                    borderRadius: BorderRadius.circular(20),
-                                  ),
-                                  child: Text(
-                                    status,
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: status == 'Delivered'
-                                          ? Colors.green
-                                          : Colors.blueGrey,
-                                      fontWeight: FontWeight.bold,
-                                    ),
+                                        ? Colors.green
+                                        : Colors.blueGrey,
+                                    fontWeight: FontWeight.bold,
                                   ),
                                 ),
                               ),
@@ -561,27 +553,11 @@ Widget deliveryCard({
                         children: [
                           const Icon(Icons.calendar_today, size: 16),
                           const SizedBox(width: 6),
-                          Flexible(
-                            fit: FlexFit.tight,
-                            child: Text(
-                              date,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(fontSize: 12),
-                            ),
-                          ),
+                          Text(date, style: TextStyle(fontSize: 12)),
                           const SizedBox(width: 12),
                           const Icon(Icons.access_time, size: 16),
                           const SizedBox(width: 6),
-                          Flexible(
-                            fit: FlexFit.tight,
-                            child: Text(
-                              time,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(fontSize: 12),
-                            ),
-                          ),
+                          Text(time, style: TextStyle(fontSize: 12)),
                         ],
                       ),
                     ],
@@ -598,12 +574,7 @@ Widget deliveryCard({
                 const Icon(Icons.location_on, size: 18),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: Text(
-                    address,
-                    style: const TextStyle(fontSize: 11.5),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
+                  child: Text(address, style: const TextStyle(fontSize: 11.5)),
                 ),
               ],
             ),
@@ -632,288 +603,275 @@ class DeliveryDetailsPopUp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final width = MediaQuery.of(context).size.width;
+    final height = MediaQuery.of(context).size.height;
+
     return Material(
       type: MaterialType.transparency,
-      child: Container(
-        width: MediaQuery.of(context).size.width * 0.9,
-        constraints: BoxConstraints(
-          maxHeight: MediaQuery.of(context).size.height * 0.8,
-        ),
-        padding: const EdgeInsets.all(20),
-        margin: const EdgeInsets.symmetric(horizontal: 20),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
-        ),
-
-        child: SingleChildScrollView(
-          physics: BouncingScrollPhysics(),
+      child: Center(
+        child: Container(
+          width: width * 0.9,
+          constraints: BoxConstraints(
+            maxHeight: height * 0.8,
+          ),
+          padding: EdgeInsets.all(width * 0.05),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+          ),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
             children: [
-              // Delivery code
-              Text(
-                '# $code',
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 18,
-                ),
-              ),
+              // Scrollable content
+              Expanded(
+                child: SingleChildScrollView(
+                  physics: const BouncingScrollPhysics(),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Delivery code
+                      Text(
+                        '# $code',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: width * 0.045, // scaled
+                        ),
+                      ),
+                      SizedBox(height: height * 0.015),
 
-              const SizedBox(height: 10),
-
-              // Map placeholder
-              Container(
-                height: 200,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.grey.shade300),
-                ),
-                child: GoogleMap(
-                  mapType: MapType.normal,
-                  initialCameraPosition: CameraPosition(
-                    target: location ?? LatLng(5.40688, 100.30968), // default if null
-                    zoom: 15,
-                  ),
-                  markers: {
-                    Marker(
-                      markerId: MarkerId(code),
-                      position: location ?? LatLng(5.40688, 100.30968),
-                      infoWindow: InfoWindow(title: 'Delivery Location'),
-                    ),
-                  },
-                  myLocationEnabled: false,
-                  zoomControlsEnabled: false,
-                  onMapCreated: (GoogleMapController controller) {
-                    // You can save the controller if you need to control the map later
-                  },
-                ),
-              ),
-
-              const SizedBox(height: 12),
-
-              // Address row
-              Row(
-                children: [
-                  const Icon(Icons.location_pin),
-                  const SizedBox(width: 8),
-                  Expanded(child: Text(address)),
-                ],
-              ),
-
-              const SizedBox(height: 20),
-
-              const Text(
-                'Goods Detail',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-              ),
-              const SizedBox(height: 10),
-
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: items.map((item) {
-                    return FutureBuilder<DocumentSnapshot>(
-                      future: FirebaseFirestore.instance
-                          .collection('items')
-                          .doc(item['itemID'])
-                          .get(),
-                      builder: (context, snapshot) {
-                        if (!snapshot.hasData) {
-                          return const SizedBox();
-                        }
-                        final data =
-                        snapshot.data!.data() as Map<String, dynamic>?;
-
-                        final imageUrl = data?['imageUrl'] ?? '';
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-                          child: Container(
-                            decoration: BoxDecoration(
-                              border: Border.all(color: Colors.grey.shade100, width: 1.5),
-                              borderRadius: BorderRadius.circular(6),
+                      // Map
+                      Container(
+                        height: height * 0.25, // scaled height
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.grey.shade300),
+                        ),
+                        child: GoogleMap(
+                          mapType: MapType.normal,
+                          initialCameraPosition: CameraPosition(
+                            target: location ?? LatLng(5.40688, 100.30968),
+                            zoom: 15,
+                          ),
+                          markers: {
+                            Marker(
+                              markerId: MarkerId(code),
+                              position: location ?? LatLng(5.40688, 100.30968),
+                              infoWindow: InfoWindow(title: 'Delivery Location'),
                             ),
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(6),
-                              child: imageUrl.isNotEmpty
-                                  ? Image.network(
-                                imageUrl,
-                                width: 50,
-                                height: 50,
-                                fit: BoxFit.cover,
-                              )
-                                  : Image.asset(
-                                'assets/images/EngineOils.jpg',
-                                width: 50,
-                                height: 50,
-                                fit: BoxFit.cover,
-                              ),
+                          },
+                          myLocationEnabled: false,
+                          zoomControlsEnabled: false,
+                        ),
+                      ),
+                      SizedBox(height: height * 0.015),
+
+                      // Address
+                      Row(
+                        children: [
+                          const Icon(Icons.location_pin),
+                          SizedBox(width: width * 0.02),
+                          Expanded(child: Text(address)),
+                        ],
+                      ),
+                      SizedBox(height: height * 0.02),
+
+                      // Goods Detail
+                      Text(
+                        'Goods Detail',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: width * 0.04,
+                        ),
+                      ),
+                      SizedBox(height: height * 0.01),
+
+                      // Items horizontally
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: items.map((item) {
+                            return FutureBuilder<DocumentSnapshot>(
+                              future: FirebaseFirestore.instance
+                                  .collection('items')
+                                  .doc(item['itemID'])
+                                  .get(),
+                              builder: (context, snapshot) {
+                                if (!snapshot.hasData) return const SizedBox();
+                                final data = snapshot.data!.data() as Map<String, dynamic>?;
+                                final imageUrl = data?['imageUrl'] ?? '';
+                                return Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      border: Border.all(color: Colors.grey.shade100, width: 1.5),
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(6),
+                                      child: imageUrl.isNotEmpty
+                                          ? Image.network(
+                                        imageUrl,
+                                        width: 50,
+                                        height: 50,
+                                        fit: BoxFit.cover,
+                                      )
+                                          : Image.asset(
+                                        'assets/images/EngineOils.jpg',
+                                        width: 50,
+                                        height: 50,
+                                        fit: BoxFit.cover,
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              },
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                      SizedBox(height: height * 0.02),
+
+                      // Items vertical detail
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: items.map((item) {
+                          return FutureBuilder<DocumentSnapshot>(
+                            future: FirebaseFirestore.instance
+                                .collection('items')
+                                .doc(item['itemID'])
+                                .get(),
+                            builder: (context, snapshot) {
+                              if (!snapshot.hasData) return const SizedBox();
+                              final data = snapshot.data!.data() as Map<String, dynamic>?;
+                              final name = data?['itemName'] ?? 'Unknown';
+                              final price = (data?['price'] ?? 0).toDouble();
+                              final qty = item['quantity'] ?? 0;
+                              return Text(
+                                '• $name | RM ${price.toStringAsFixed(2)} x $qty',
+                                style: const TextStyle(color: Colors.grey),
+                              );
+                            },
+                          );
+                        }).toList(),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              SizedBox(height: height * 0.02),
+
+              // Fixed button
+              Builder(
+                builder: (_) {
+                  if (status == 'New Order') {
+                    return Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        ElevatedButton(
+                          onPressed: () => Navigator.of(context).pop(),
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                              vertical: 5,
+                              horizontal: 38,
+                            ),
+                            backgroundColor: Colors.grey.shade200,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(7),
+                            ),
+                          ),
+                          child: const Text(
+                            'Cancel',
+                            style: TextStyle(
+                              color: Colors.grey,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        ElevatedButton(
+                          onPressed: () {
+                            FirebaseFirestore.instance
+                                .collection('delivery')
+                                .doc(code)
+                                .update({'status': 'On-Going'});
+                            Navigator.of(context).pop();
+                          },
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                              vertical: 5,
+                              horizontal: 30,
+                            ),
+                            backgroundColor: const Color(0xFF1B6C07),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(7),
+                            ),
+                          ),
+                          child: const Text(
+                            'Accepted',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ],
+                    );
+                  } else if (status == 'On-Going') {
+                    return ElevatedButton(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => GoogleMapPage(
+                              deliveryCode: code,
+                              deliveryAddress: address,
+                              deliveryLocation: location,
+                              deliveryStatus: status,
+                              deliveryItems: items,
                             ),
                           ),
                         );
                       },
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 5,
+                          horizontal: 10,
+                        ),
+                        backgroundColor: const Color(0xFF1B6C07),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(7),
+                        ),
+                      ),
+                      child: const Text(
+                        'Start Navigation',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     );
-                  }).toList(),
-                ),
-              ),
-
-              const SizedBox(height: 20),
-
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: items.map((item) {
-                  return FutureBuilder<DocumentSnapshot>(
-                    future: FirebaseFirestore.instance
-                        .collection('items')
-                        .doc(item['itemID'])
-                        .get(),
-                    builder: (context, snapshot) {
-                      if (snapshot.connectionState == ConnectionState.waiting) {
-                        return const Center(
-                          child: SizedBox(
-                            width: 24,
-                            height: 24,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          ),
-                        );
-                      }
-
-                      if (!snapshot.hasData || !snapshot.data!.exists) {
-                        return const Text("Item not found");
-                      }
-
-                      final data =
-                      snapshot.data!.data() as Map<String, dynamic>;
-                      final name = data['itemName'] ?? 'Unknown';
-                      final price = (data['price'] ?? 0).toDouble();
-                      final qty = item['quantity'] ?? 0;
-
-                      return Text(
-                        '• $name | RM ${price.toStringAsFixed(2)} x $qty',
-                        style: const TextStyle(color: Colors.grey),
-                      );
-                    },
-                  );
-                }).toList(),
-              ),
-
-              const SizedBox(height: 20),
-
-              Align(
-                alignment: Alignment.center,
-                child: Builder(
-                  builder: (_) {
-                    if (status == 'New Order') {
-                      return Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          ElevatedButton(
-                            onPressed: () => Navigator.of(context).pop(),
-                            style: ElevatedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(
-                                vertical: 5,
-                                horizontal: 38,
-                              ),
-                              backgroundColor: Colors.grey.shade200,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(7),
-                              ),
-                            ),
-                            child: const Text(
-                              'Cancel',
-                              style: TextStyle(
-                                color: Colors.grey,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                          ElevatedButton(
-                            onPressed: () {
-                              FirebaseFirestore.instance
-                                  .collection('delivery')
-                                  .doc(code)
-                                  .update({'status': 'On-Going'});
-                              Navigator.of(context).pop();
-                            },
-                            style: ElevatedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(
-                                vertical: 5,
-                                horizontal: 30,
-                              ),
-                              backgroundColor: const Color(0xFF1B6C07),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(7),
-                              ),
-                            ),
-                            child: const Text(
-                              'Accepted',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ],
-                      );
-                    } else if (status == 'On-Going') {
-                      return ElevatedButton(
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => GoogleMapPage(
-                                deliveryCode: code,
-                                deliveryAddress: address,
-                                deliveryLocation: location,
-                                deliveryStatus: status,
-                                deliveryItems: items,
-                              ),
-                            ),
-                          );
-                        },
-                        style: ElevatedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(
-                            vertical: 5,
-                            horizontal: 10,
-                          ),
-                          backgroundColor: const Color(0xFF1B6C07),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(7),
-                          ),
+                  } else {
+                    return ElevatedButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 5,
+                          horizontal: 30,
                         ),
-                        child: const Text(
-                          'Start Navigation',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                          ),
+                        backgroundColor: const Color(0xFF1B6C07),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(7),
                         ),
-                      );
-                    } else {
-                      return ElevatedButton(
-                        onPressed: () => Navigator.of(context).pop(),
-                        style: ElevatedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(
-                            vertical: 5,
-                            horizontal: 30,
-                          ),
-                          backgroundColor: const Color(0xFF1B6C07),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(7),
-                          ),
+                      ),
+                      child: const Text(
+                        'Back',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
                         ),
-                        child: const Text(
-                          'Back',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      );
-                    }
-                  },
-                ),
+                      ),
+                    );
+                  }
+                },
               ),
             ],
           ),
