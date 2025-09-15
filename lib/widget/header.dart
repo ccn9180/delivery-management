@@ -5,7 +5,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 class PageHeader extends StatelessWidget {
   final String title;
-  const PageHeader({super.key, required this.title});
+  final Widget? extraWidget;
+
+  const PageHeader({super.key, required this.title,this.extraWidget});
 
   Stream<String?> _profileImageStream(String uid) {
     return FirebaseFirestore.instance
@@ -62,30 +64,38 @@ class PageHeader extends StatelessWidget {
               color: Color(0xFF1B6C07),
             ),
           ),
-          Container(
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.2),
-                  spreadRadius: 1,
-                  blurRadius: 2,
-                  offset: const Offset(0, 2),
-                ),
+          Row(
+            children: [
+              if (extraWidget != null) ...[
+                extraWidget!,
+                const SizedBox(width: 12),
               ],
-            ),
-            child: CircleAvatar(
-              radius: 24,
-              backgroundColor: Colors.white,
-              backgroundImage: provider,
-              child: isLoading
-                  ? const CircularProgressIndicator(
-                  strokeWidth: 2, color: Color(0xFF1B6C07))
-                  : (provider == null
-                  ? const Icon(Icons.person,
-                  color: Color(0xFF1B6C07), size: 27)
-                  : null),
-            ),
+              Container(
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.2),
+                      spreadRadius: 1,
+                      blurRadius: 2,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: CircleAvatar(
+                  radius: 24,
+                  backgroundColor: Colors.white,
+                  backgroundImage: provider,
+                  child: isLoading
+                      ? const CircularProgressIndicator(
+                      strokeWidth: 2, color: Color(0xFF1B6C07))
+                      : (provider == null
+                      ? const Icon(Icons.person,
+                      color: Color(0xFF1B6C07), size: 27)
+                      : null),
+                ),
+              ),
+            ],
           ),
         ],
       ),

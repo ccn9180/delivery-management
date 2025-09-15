@@ -162,7 +162,47 @@ class DeliveryListPage extends StatelessWidget {
           child: Column(
             children: [
               // Header
-              const PageHeader(title: "Delivery List"),
+              PageHeader(
+                title: "Delivery List",
+                extraWidget: StreamBuilder<List<Delivery>>(
+                  stream: fetchEmployeeDeliveries(),
+                  builder: (context, snapshot) {
+                    final deliveries = snapshot.data ?? [];
+                    final total = deliveries.length;
+                    final delivered = deliveries.where((d) => d.status == 'Delivered').length;
+                    final progress = total == 0 ? 0.0 : delivered / total;
+
+                    return SizedBox(
+                      width: 50,
+                      height: 50,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          SizedBox(
+                            width: 46,
+                            height: 46,
+                            child: CircularProgressIndicator(
+                              value: progress,
+                              strokeWidth: 6,
+                              backgroundColor: Colors.grey.shade200,
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                progress == 1.0 ? Colors.green : Colors.orange,
+                              ),
+                            ),
+                          ),
+                          Text(
+                            "${(progress * 100).toInt()}%",
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
 
               // TabBar
               const TabBar(
