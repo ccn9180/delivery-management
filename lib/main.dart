@@ -60,7 +60,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'Greenstem Auto',
+      title: 'SWPS',
       theme: ThemeData(
         primarySwatch: Colors.green,
       ),
