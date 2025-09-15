@@ -10,4 +10,8 @@ class Config {
   // Location tracking settings
   static const double locationUpdateDistance = 5.0; // meters
   static const LocationAccuracy locationAccuracy = LocationAccuracy.high;
+
+  // Behavior toggles
+  static const bool autoStartNavigation = true; // start navigation when map loads
 }
+

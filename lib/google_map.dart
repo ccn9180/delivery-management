@@ -1,11 +1,14 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
+import 'dart:ui' as ui;
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart' as permission_handler_plugin;
 import 'package:http/http.dart' as http;
+import 'config.dart';
 
 class GoogleMapPage extends StatefulWidget {
   final String? deliveryCode;
@@ -43,7 +46,11 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
   Set<Marker> _markers = {};
   LatLng? _destination;
   // Remove PolylinePoints instance - we'll use direct decoding
-  String _googleApiKey = "AIzaSyBwfTQ-3Qpia1X0zkpy8Dw6R6MV8HI016U"; // replace with your API key
+  String _googleApiKey = Config.googleMapsApiKey;
+  // Driver view/follow state
+  bool _isFollowMode = true; // camera follows heading like turn-by-turn
+  bool _userInteracting = false;
+  BitmapDescriptor? _navArrowIcon;
   
   // Navigation direction variables
   String _currentDirection = "Head towards destination";
@@ -51,8 +58,9 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
   List<LatLng> _routePoints = [];
   int _currentRouteIndex = 0;
 
-  // TARUMT Penang branch coordinates (origin)
-  static const LatLng _tarumtPenang = LatLng(5.40688, 100.30968);
+  // Default delivery destination from configuration (used if widget doesn't pass one)
+  static final LatLng _defaultDestination =
+      LatLng(Config.deliveryLatitude, Config.deliveryLongitude);
 
   @override
   void initState() {
@@ -107,8 +115,8 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
     }
 
     await _getCurrentLocation();
-      // 🚀 Auto-start navigation after current location is found
-      if (mounted && _currentPosition != null) {
+      // 🚀 Auto-start navigation after current location is found (toggleable via Config)
+      if (mounted && _currentPosition != null && Config.autoStartNavigation) {
         _startNavigation();
       }
     } catch (e) {
@@ -123,33 +131,48 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
 
   Future<void> _getCurrentLocation() async {
     try {
-      Position position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
-      );
+      // 1) Try last known quickly to place camera fast
+      Position? lastKnown = await Geolocator.getLastKnownPosition();
+      if (mounted && lastKnown != null) {
         setState(() {
-          _currentPosition = LatLng(position.latitude, position.longitude);
+          _currentPosition = LatLng(lastKnown.latitude, lastKnown.longitude);
+        });
+      }
+
+      // 2) Request a fresh high-accuracy fix
+      Position position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: Config.locationAccuracy,
+        timeLimit: const Duration(seconds: 12),
+      );
+
+      if (!mounted) return;
+      setState(() {
+        _currentPosition = LatLng(position.latitude, position.longitude);
         _isLoading = false;
         _errorMessage = '';
-        });
+      });
 
       _moveCameraToCurrentPosition();
       _startLocationTracking();
     } catch (e) {
+      if (mounted) {
         setState(() {
           _errorMessage = 'Error getting current location: ${e.toString()}';
           _isLoading = false;
         });
+      }
     }
   }
 
   void _moveCameraToCurrentPosition() {
     if (_mapController != null && _currentPosition != null) {
       // Set initial camera with delivery man's perspective
+      // Driver-forward perspective (aim slightly ahead of the car)
       CameraPosition cameraPosition = CameraPosition(
-        target: _currentPosition!,
-        zoom: 19, // High zoom for street-level view
-        bearing: _currentBearing, // Rotate camera to show direction
-        tilt: 45, // Slight tilt for better perspective
+        target: _pointAheadOf(_currentPosition!, 35),
+        zoom: 19.5,
+        bearing: _currentBearing,
+        tilt: 60,
       );
       
       _mapController!.animateCamera(
@@ -166,10 +189,9 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
 
     _positionStream?.cancel();
     _positionStream = Geolocator.getPositionStream(
-      locationSettings: const LocationSettings(
-        accuracy: LocationAccuracy.high, // High accuracy for better precision
-        distanceFilter: 5, // Reduced distance filter for more frequent updates
-        timeLimit: Duration(seconds: 30), // Add timeout
+      locationSettings: LocationSettings(
+        accuracy: LocationAccuracy.bestForNavigation,
+        distanceFilter: Config.locationUpdateDistance.toInt(),
       ),
     ).listen(
           (Position position) {
@@ -179,6 +201,10 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
           });
           if (_isNavigating && _destination != null) {
             _updateNavigation(position);
+            // If we already have a route, keep it; otherwise draw now
+            if (_polylines.isEmpty) {
+              _showRouteDirection(_currentPosition!, _destination!);
+            }
           }
         }
       },
@@ -198,7 +224,12 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
             markerId: const MarkerId("origin"),
             position: _currentPosition!,
             infoWindow: const InfoWindow(title: "Current Location"),
-            icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
+            icon: _isNavigating
+                ? (_navArrowIcon ?? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure))
+                : BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
+            flat: _isNavigating,
+            rotation: _isNavigating ? _currentBearing : 0,
+            anchor: _isNavigating ? const Offset(0.5, 0.5) : const Offset(0.5, 1.0),
           ),
         );
       });
@@ -216,12 +247,13 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
     if (_mapController == null || _currentPosition == null) return;
 
     try {
-      // Create camera position that follows the delivery man's direction
+      if (!_isFollowMode) return; // don't override when user explores
+      // Create camera position that follows the driver's direction
       CameraPosition cameraPosition = CameraPosition(
-        target: _currentPosition!,
-        zoom: 19, // High zoom for street-level view
-        bearing: _currentBearing, // Rotate camera to show direction
-        tilt: 45, // Slight tilt for better perspective
+        target: _pointAheadOf(_currentPosition!, 35),
+        zoom: 19.5,
+        bearing: _currentBearing,
+        tilt: 60,
       );
 
       _mapController!.animateCamera(
@@ -235,17 +267,50 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
   Future<void> _startNavigation() async {
     if (_currentPosition == null) return;
     
-    // Use delivery location if available, otherwise use TARUMT as fallback
-    LatLng destination = widget.deliveryLocation ?? _tarumtPenang;
+    // Use delivery location if available, otherwise use configured default
+    LatLng destination = widget.deliveryLocation ?? _defaultDestination;
     
+    await _prepareNavArrowIcon();
+
     setState(() {
       _isNavigating = true;
       _isCalculatingRoute = false; // Don't calculate, just show direction
       _destination = destination;
     });
     
-    // Show route direction without calculating
+    // Show route direction using Google Directions API
     _showRouteDirection(_currentPosition!, destination);
+  }
+
+  Future<void> _prepareNavArrowIcon() async {
+    if (_navArrowIcon != null) return;
+    try {
+      const double size = 96;
+      final ui.PictureRecorder recorder = ui.PictureRecorder();
+      final Canvas canvas = Canvas(recorder);
+
+      final Paint fill = Paint()..color = const Color(0xFF1A73E8);
+      final Paint stroke = Paint()
+        ..color = Colors.white
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 6;
+
+      final Path path = Path();
+      path.moveTo(size * 0.5, 6);
+      path.lineTo(size * 0.82, size * 0.86);
+      path.lineTo(size * 0.5, size * 0.7);
+      path.lineTo(size * 0.18, size * 0.86);
+      path.close();
+
+      canvas.drawPath(path, fill);
+      canvas.drawPath(path, stroke);
+
+      final ui.Image img = await recorder.endRecording().toImage(size.toInt(), size.toInt());
+      final ByteData? bytes = await img.toByteData(format: ui.ImageByteFormat.png);
+      if (bytes != null) {
+        _navArrowIcon = BitmapDescriptor.fromBytes(bytes.buffer.asUint8List());
+      }
+    } catch (_) {}
   }
 
   void _stopNavigation() {
@@ -271,12 +336,41 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
         _routePoints = roadPoints;
         _currentRouteIndex = 0;
         
-        // Create main route polyline following actual roads
-        Polyline mainRoute = Polyline(
-          polylineId: const PolylineId("main_route"),
-          color: const Color(0xFF4285F4), // Google Maps blue color
-          width: 8, // Thick solid line
+        // Create navigation-style polylines (underlay + main route + inner glow)
+        final Polyline underlay = Polyline(
+          polylineId: const PolylineId("route_underlay"),
+          color: Colors.white,
+          width: 18,
           points: roadPoints,
+          zIndex: 0,
+          geodesic: false,
+          startCap: Cap.roundCap,
+          endCap: Cap.roundCap,
+          jointType: JointType.round,
+        );
+
+        final Polyline mainRoute = Polyline(
+          polylineId: const PolylineId("main_route"),
+          color: const Color(0xFF1A73E8),
+          width: 12,
+          points: roadPoints,
+          zIndex: 1,
+          geodesic: false,
+          startCap: Cap.roundCap,
+          endCap: Cap.roundCap,
+          jointType: JointType.round,
+        );
+
+        final Polyline innerGlow = Polyline(
+          polylineId: const PolylineId("route_inner"),
+          color: const Color(0xFF7BB1FF),
+          width: 5,
+          points: roadPoints,
+          zIndex: 2,
+          geodesic: false,
+          startCap: Cap.roundCap,
+          endCap: Cap.roundCap,
+          jointType: JointType.round,
         );
 
         // Create markers for origin and destination
@@ -284,7 +378,7 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
           Marker(
             markerId: const MarkerId("origin"),
             position: origin,
-            infoWindow: const InfoWindow(title: "TAR UMT Penang", snippet: "Starting Point"),
+            infoWindow: const InfoWindow(title: "Current Location", snippet: "Starting Point"),
             icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
           ),
           Marker(
@@ -296,7 +390,7 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
         };
 
         setState(() {
-          _polylines = {mainRoute};
+          _polylines = {underlay, mainRoute, innerGlow};
           _markers = directionMarkers;
           _isCalculatingRoute = false;
         });
@@ -317,7 +411,7 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
     }
   }
 
-  // Get real road-based route from Google Directions API
+  // Get real road-based route from Google Directions API (use detailed legs/steps)
   Future<List<LatLng>> _getRoadBasedRoute(LatLng origin, LatLng destination) async {
     try {
       String url = 'https://maps.googleapis.com/maps/api/directions/json?'
@@ -332,6 +426,26 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
         final data = json.decode(response.body);
         
         if (data['status'] == 'OK' && data['routes'].isNotEmpty) {
+          // Prefer detailed steps to avoid straight-line artifacts
+          final List<LatLng> points = [];
+          final routes = data['routes'] as List;
+          final legs = routes[0]['legs'] as List;
+          for (final leg in legs) {
+            final steps = leg['steps'] as List;
+            for (final step in steps) {
+              final poly = step['polyline']?['points'];
+              if (poly is String && poly.isNotEmpty) {
+                final decoded = _decodePolyline(poly);
+                if (points.isNotEmpty && decoded.isNotEmpty && points.last == decoded.first) {
+                  points.addAll(decoded.skip(1));
+                } else {
+                  points.addAll(decoded);
+                }
+              }
+            }
+          }
+          if (points.isNotEmpty) return points;
+          // fallback to overview if steps missing
           String encodedPolyline = data['routes'][0]['overview_polyline']['points'];
           return _decodePolyline(encodedPolyline);
         }
@@ -349,18 +463,47 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
     _routePoints = fallbackPoints;
     _currentRouteIndex = 0;
     
-    Polyline mainRoute = Polyline(
-      polylineId: const PolylineId("main_route"),
-      color: const Color(0xFF4285F4),
-      width: 8,
+    final Polyline underlay = Polyline(
+      polylineId: const PolylineId("route_underlay"),
+      color: Colors.white,
+      width: 18,
       points: fallbackPoints,
+      zIndex: 0,
+      geodesic: false,
+      startCap: Cap.roundCap,
+      endCap: Cap.roundCap,
+      jointType: JointType.round,
+    );
+
+    final Polyline mainRoute = Polyline(
+      polylineId: const PolylineId("main_route"),
+      color: const Color(0xFF1A73E8),
+      width: 12,
+      points: fallbackPoints,
+      zIndex: 1,
+      geodesic: false,
+      startCap: Cap.roundCap,
+      endCap: Cap.roundCap,
+      jointType: JointType.round,
+    );
+
+    final Polyline innerGlow = Polyline(
+      polylineId: const PolylineId("route_inner"),
+      color: const Color(0xFF7BB1FF),
+      width: 5,
+      points: fallbackPoints,
+      zIndex: 2,
+      geodesic: false,
+      startCap: Cap.roundCap,
+      endCap: Cap.roundCap,
+      jointType: JointType.round,
     );
 
     Set<Marker> directionMarkers = {
       Marker(
         markerId: const MarkerId("origin"),
         position: origin,
-        infoWindow: const InfoWindow(title: "TAR UMT Penang", snippet: "Starting Point"),
+        infoWindow: const InfoWindow(title: "Current Location", snippet: "Starting Point"),
         icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
       ),
       Marker(
@@ -372,7 +515,7 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
     };
 
     setState(() {
-      _polylines = {mainRoute};
+      _polylines = {underlay, mainRoute, innerGlow};
       _markers = directionMarkers;
       _isCalculatingRoute = false;
     });
@@ -616,6 +759,24 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
     return points;
   }
 
+  // Compute a point slightly ahead of current location in heading direction (meters)
+  LatLng _pointAheadOf(LatLng origin, double metersAhead) {
+    // simple equirectangular approximation for short distances
+    final double bearingRad = _currentBearing * (pi / 180);
+    const double earthRadius = 6378137.0; // meters
+    final double delta = metersAhead / earthRadius;
+    final double lat1 = origin.latitude * (pi / 180);
+    final double lng1 = origin.longitude * (pi / 180);
+
+    final double lat2 = asin(sin(lat1) * cos(delta) + cos(lat1) * sin(delta) * cos(bearingRad));
+    final double lng2 = lng1 + atan2(
+      sin(bearingRad) * sin(delta) * cos(lat1),
+      cos(delta) - sin(lat1) * sin(lat2),
+    );
+
+    return LatLng(lat2 * (180 / pi), ((lng2 * (180 / pi) + 540) % 360) - 180);
+  }
+
   // Fit camera to show points (for direction display) - optimized for delivery navigation
   void _fitCameraToPoints(List<LatLng> points) {
     if (points.isEmpty || _mapController == null) return;
@@ -716,16 +877,28 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
       children: [
         GoogleMap(
           initialCameraPosition: CameraPosition(
-            target: _currentPosition!, 
-            zoom: 19, // High zoom for delivery navigation
-            bearing: _currentBearing, // Initial bearing
-            tilt: 45, // Initial tilt
+            target: _pointAheadOf(_currentPosition!, 35), 
+            zoom: 25,
+            bearing: _currentBearing,
+            tilt: 80,
           ),
           myLocationEnabled: true,
           myLocationButtonEnabled: true,
-          zoomControlsEnabled: true, // Enable zoom controls for delivery man
-          mapToolbarEnabled: false, // Disable toolbar for cleaner view
-          compassEnabled: true, // Enable compass for navigation
+          zoomControlsEnabled: false,
+          mapToolbarEnabled: false,
+          compassEnabled: true,
+          trafficEnabled: true,
+          buildingsEnabled: true,
+          padding: const EdgeInsets.only(top: 80, bottom: 170, left: 6, right: 6),
+          onCameraMoveStarted: () {
+            _userInteracting = true;
+            if (_isFollowMode) {
+              setState(() => _isFollowMode = false);
+            }
+          },
+          onCameraIdle: () {
+            _userInteracting = false;
+          },
           markers: _isNavigating
               ? _markers
               : {
@@ -772,6 +945,25 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
                   ),
                 ),
               ),
+            ),
+          ),
+        // Re-center button to re-enter follow mode
+        if (!_isFollowMode)
+          Positioned(
+            bottom: 200,
+            left: 16,
+            child: ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.white,
+                foregroundColor: Colors.black87,
+                elevation: 3,
+              ),
+              onPressed: () {
+                setState(() => _isFollowMode = true);
+                _followDeliveryManPerspective();
+              },
+              icon: const Icon(Icons.my_location),
+              label: const Text('Re-center'),
             ),
           ),
         // Navigation control buttons (bottom right)
@@ -823,82 +1015,60 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
             ),
           ),
 
-        // Large navigation direction overlay (Waze-like)
+        // Compact guidance banner
         if (_isNavigating && _destination != null && !_isCalculatingRoute)
           Positioned(
-            top: 100,
-            left: 16,
-            right: 16,
+            top: 60,
+            left: 12,
+            right: 12,
             child: Container(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(12),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.2),
-                    blurRadius: 8,
-                    offset: const Offset(0, 4),
+                    color: Colors.black.withOpacity(0.15),
+                    blurRadius: 6,
+                    offset: const Offset(0, 3),
                   ),
                 ],
               ),
-              child: Column(
+              child: Row(
                 children: [
-                  // Direction text
-                  Text(
-                    _currentDirection,
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black87,
-                    ),
-                    textAlign: TextAlign.center,
+                  Transform.rotate(
+                    angle: _currentBearing * (pi / 180),
+                    child: const Icon(Icons.turn_slight_right, color: Colors.blue, size: 26),
                   ),
-                  const SizedBox(height: 8),
-                  // Distance and bearing
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(
-                        children: [
-                          const Icon(Icons.navigation, color: Colors.blue, size: 24),
-                          const SizedBox(width: 8),
-                          Text(
-                            _calculateDistance(_currentPosition!, _destination!),
-                            style: const TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.blue,
-                            ),
-                          ),
-                        ],
-                      ),
-                      // Bearing arrow
-                      Transform.rotate(
-                        angle: _currentBearing * (pi / 180),
-                        child: const Icon(
-                          Icons.arrow_upward,
-                          color: Colors.blue,
-                          size: 32,
-                        ),
-                      ),
-                    ],
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      _currentDirection,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    _calculateDistance(_currentPosition!, _destination!),
+                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.blue),
                   ),
                 ],
               ),
             ),
           ),
 
-        // Delivery info card at bottom
+        // Delivery info collapsible bar to give more map space
         Positioned(
           bottom: 0,
           left: 0,
           right: 0,
           child: Container(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
             decoration: const BoxDecoration(
               color: Color(0xFF1B6C07),
-              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+              borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -907,10 +1077,10 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
                   widget.deliveryCode ?? "# MSN 10011",
                   style: const TextStyle(
                       color: Colors.white,
-                      fontSize: 20,
+                      fontSize: 18,
                       fontWeight: FontWeight.bold),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 6),
                 Row(
                   children: [
                     const Icon(Icons.location_on, color: Colors.white),
@@ -918,28 +1088,30 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
                     Expanded(
                       child: Text(
                         widget.deliveryAddress ?? "22 & 24, Jln Sultan Ahmad Shah, George Town, Pulau Pinang",
-                        style: const TextStyle(color: Colors.white),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(color: Colors.white, fontSize: 13),
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 6),
                 Row(
                   children: [
                     const Icon(Icons.timer, color: Colors.white),
                     const SizedBox(width: 8),
                     Text(
                       _getEstimatedDeliveryTime(),
-                      style: const TextStyle(color: Colors.white),
+                      style: const TextStyle(color: Colors.white, fontSize: 13),
                     ),
                   ],
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 10),
                 
                 // Navigation status indicator
                 if (_isNavigating) ...[
                   Container(
-                    padding: const EdgeInsets.all(12),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                     decoration: BoxDecoration(
                       color: Colors.white.withOpacity(0.2),
                       borderRadius: BorderRadius.circular(8),
@@ -953,19 +1125,20 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
                           "Navigation Active",
                           style: TextStyle(
                             color: Colors.white,
-                            fontSize: 16,
+                            fontSize: 14,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
                       ],
                     ),
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 10),
                 ],
                 
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.white,
+                      minimumSize: const Size.fromHeight(36),
                       foregroundColor: Colors.green),
                   onPressed: () {
                     ScaffoldMessenger.of(context).showSnackBar(
