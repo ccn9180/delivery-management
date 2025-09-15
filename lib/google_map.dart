@@ -422,6 +422,7 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
 
   // Show route direction with real road-based navigation
   void _showRouteDirection(LatLng origin, LatLng destination) async {
+    debugPrint('Starting route calculation from ${origin.latitude},${origin.longitude} to ${destination.latitude},${destination.longitude}');
     setState(() {
       _isCalculatingRoute = true;
     });
@@ -429,6 +430,7 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
     try {
       // Get real road-based route from Google Directions API
       List<LatLng> roadPoints = await _getRoadBasedRoute(origin, destination);
+      debugPrint('Route points received: ${roadPoints.length}');
 
       if (roadPoints.isNotEmpty) {
         _routePoints = roadPoints;
@@ -518,12 +520,15 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
           'mode=driving&'
           'key=$_googleApiKey';
 
+      debugPrint('Making API call to: $url');
       final response = await http.get(Uri.parse(url));
+      debugPrint('API response status: ${response.statusCode}');
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
 
         if (data['status'] == 'OK' && data['routes'].isNotEmpty) {
+          debugPrint('API call successful, processing route data');
           // Prefer detailed steps to avoid straight-line artifacts and capture road names
           _navSteps = [];
           final List<LatLng> points = [];
@@ -552,20 +557,35 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
           // fallback to overview if steps missing
           String encodedPolyline = data['routes'][0]['overview_polyline']['points'];
           return _decodePolyline(encodedPolyline);
+        } else {
+          debugPrint('Directions API error: ${data['status']} - ${data['error_message'] ?? 'Unknown error'}');
         }
+      } else {
+        debugPrint('HTTP error: ${response.statusCode}');
       }
     } catch (e) {
       debugPrint('Error getting directions: $e');
     }
 
+    // Try a no-billing fallback using OSRM demo server
+    debugPrint('Trying OSRM fallback for road-based route');
+    final List<LatLng> osrm = await _getOsrmRoutePoints(origin, destination);
+    if (osrm.isNotEmpty) return osrm;
+
+    debugPrint('Returning empty route points, will use fallback');
     return [];
   }
 
   // Fallback route if steps fetch fails: try overview polyline from Directions
   Future<void> _createFallbackRoute(LatLng origin, LatLng destination) async {
     // Try to fetch overview-based route (still follows roads)
-    final List<LatLng> overview = await _getRouteCoordinates(origin, destination);
+    List<LatLng> overview = await _getRouteCoordinates(origin, destination);
+    // If Google overview not available (e.g., billing disabled), try OSRM
     if (overview.isEmpty) {
+      overview = await _getOsrmRoutePoints(origin, destination);
+    }
+    if (overview.isEmpty) {
+      debugPrint('No road-based overview available; skipping straight-line fallback');
       if (mounted) {
         setState(() {
           _isCalculatingRoute = false;
@@ -638,6 +658,31 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
 
     _updateNavigationDirection();
     _fitCameraToPoints(overview);
+  }
+
+  // No-billing routing via OSRM public demo. Returns road-following points.
+  Future<List<LatLng>> _getOsrmRoutePoints(LatLng origin, LatLng destination) async {
+    try {
+      final String url = 'https://router.project-osrm.org/route/v1/driving/'
+          '${origin.longitude},${origin.latitude};'
+          '${destination.longitude},${destination.latitude}'
+          '?overview=full&geometries=polyline&alternatives=false&steps=false';
+      debugPrint('OSRM request: $url');
+      final response = await http.get(Uri.parse(url));
+      debugPrint('OSRM response status: ${response.statusCode}');
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['code'] == 'Ok' && (data['routes'] as List).isNotEmpty) {
+          final String encoded = data['routes'][0]['geometry'];
+          return _decodePolyline(encoded);
+        } else {
+          debugPrint('OSRM error: ${data['code']}');
+        }
+      }
+    } catch (e) {
+      debugPrint('Error fetching OSRM route: $e');
+    }
+    return [];
   }
 
   // Removed artificial straight-line fallback to ensure route always follows real roads
