@@ -144,7 +144,7 @@ class _ProfileState extends State<Profile> {
           child: Text(
             "Profile",
             style: TextStyle(
-              color: Color(0xFF1B6C07),
+              color: Colors.black,
               fontWeight: FontWeight.bold,
               fontSize: 24,
             ),
