@@ -523,25 +523,29 @@ Widget deliveryCard({
                           if (status == 'On-Going' || status == 'Delivered')
                             Transform.translate(
                               offset: const Offset(0, -14.5),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 3,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: status == 'Delivered'
-                                      ? Colors.green.shade100
-                                      : Colors.blue.shade100,
-                                  borderRadius: BorderRadius.circular(20),
-                                ),
-                                child: Text(
-                                  status,
-                                  style: TextStyle(
-                                    fontSize: 12,
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                alignment: Alignment.centerRight,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 3,
+                                  ),
+                                  decoration: BoxDecoration(
                                     color: status == 'Delivered'
-                                        ? Colors.green
-                                        : Colors.blueGrey,
-                                    fontWeight: FontWeight.bold,
+                                        ? Colors.green.shade100
+                                        : Colors.blue.shade100,
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: Text(
+                                    status,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: status == 'Delivered'
+                                          ? Colors.green
+                                          : Colors.blueGrey,
+                                      fontWeight: FontWeight.bold,
+                                    ),
                                   ),
                                 ),
                               ),
@@ -553,11 +557,18 @@ Widget deliveryCard({
                         children: [
                           const Icon(Icons.calendar_today, size: 16),
                           const SizedBox(width: 6),
-                          Text(date, style: TextStyle(fontSize: 12)),
-                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              date,
+                              style: const TextStyle(fontSize: 12),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
                           const Icon(Icons.access_time, size: 16),
                           const SizedBox(width: 6),
-                          Text(time, style: TextStyle(fontSize: 12)),
+                          Text(time, style: const TextStyle(fontSize: 12)),
                         ],
                       ),
                     ],
