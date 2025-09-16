@@ -1424,11 +1424,11 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
         // Draggable delivery info sheet: pull up/down like a drawer
         if (_showDeliveryInfoCard)
           DraggableScrollableSheet(
-            initialChildSize: 0.15, // collapsed height
-            minChildSize: 0.10,
-            maxChildSize: 0.50,
+            initialChildSize: 0.18, // collapsed height
+            minChildSize: 0.12,
+            maxChildSize: 0.4,
             snap: true,
-            snapSizes: const [0.16, 0.50],
+            snapSizes: const [0.18, 0.4],
             builder: (context, scrollController) {
             return Container(
               decoration: const BoxDecoration(
@@ -1446,27 +1446,28 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
                     Container(
                       width: 36,
                       height: 4,
-                      margin: const EdgeInsets.only(bottom: 10),
+                      margin: const EdgeInsets.only(bottom: 8),
                       decoration: BoxDecoration(
                         color: Colors.white.withOpacity(0.6),
                         borderRadius: BorderRadius.circular(4),
                       ),
                     ),
                     Text(
-                      widget.deliveryCode ?? "# MSN 10011",
+                      '#${widget.deliveryCode ?? "Default code"}',
                       style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold),
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 10),
                     Row(
                       children: [
                         const Icon(Icons.location_on, color: Colors.white),
-                        const SizedBox(width: 8),
+                        const SizedBox(width: 6),
                         Expanded(
                           child: Text(
-                            widget.deliveryAddress ?? "22 & 24, Jln Sultan Ahmad Shah, George Town, Pulau Pinang",
+                            widget.deliveryAddress ?? "Address Invalid",
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(color: Colors.white, fontSize: 13),
@@ -1474,7 +1475,7 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 8),
                     Row(
                       children: [
                         const Icon(Icons.timer, color: Colors.white),
@@ -1572,7 +1573,7 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
                           MaterialPageRoute(builder: (context) => const ConfirmationPage()),
                         );
                       },
-                      child: const Text("Update"),
+                      child: const Text("Update",style: TextStyle(fontSize: 14,fontWeight: FontWeight.bold)),
                     )
                   ],
                 ),
