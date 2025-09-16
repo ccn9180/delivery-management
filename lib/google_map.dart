@@ -1576,16 +1576,23 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
                       ),
                       const SizedBox(height: 10),
                     ],
+                    // Replace this code in the Update button onPressed:
                     ElevatedButton(
                       style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.white,
-                          minimumSize: const Size.fromHeight(36),
-                          foregroundColor: Colors.green),
+                        backgroundColor: Colors.white,
+                        minimumSize: const Size.fromHeight(36),
+                        foregroundColor: Colors.green,
+                      ),
                       onPressed: () {
-                        // Replace Google Map with Confirmation page so back goes to delivery list
-                        Navigator.pushReplacement(
+                        // Navigate to ConfirmationPage and remove GoogleMapPage from stack
+                        Navigator.pushAndRemoveUntil(
                           context,
-                          MaterialPageRoute(builder: (context) => const ConfirmationPage()),
+                          MaterialPageRoute(builder: (context) => ConfirmationPage(
+                            deliveryCode: widget.deliveryCode, // Pass the delivery code
+                            deliveryAddress: widget.deliveryAddress,
+                            deliveryItems: widget.deliveryItems,
+                          )),
+                              (route) => route.isFirst, // Keep only the first route (HomePage)
                         );
                       },
                       child: const Text("Update"),
