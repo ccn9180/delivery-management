@@ -35,7 +35,6 @@ class Delivery {
   }
 }
 
-/// ----------------------- FIREBASE HELPERS -----------------------
 /// Cache for items to avoid re-reading the same doc
 final Map<String, Map<String, dynamic>> _itemCache = {};
 
@@ -318,10 +317,27 @@ class DeliveryListTab extends StatefulWidget {
   _DeliveryListTabState createState() => _DeliveryListTabState();
 }
 
-class _DeliveryListTabState extends State<DeliveryListTab>
-    with AutomaticKeepAliveClientMixin {
+class _DeliveryListTabState extends State<DeliveryListTab> with AutomaticKeepAliveClientMixin {
+  @override
+  bool _itemsLoaded = false;
+
   @override
   bool get wantKeepAlive => true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadItems();
+  }
+
+  Future<void> _loadItems() async {
+    await preloadItems(widget.deliveries);
+    if (mounted) {
+      setState(() {
+        _itemsLoaded = true;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -335,6 +351,10 @@ class _DeliveryListTabState extends State<DeliveryListTab>
           textAlign: TextAlign.center,
         ),
       );
+    }
+
+    if (!_itemsLoaded) {
+      return const Center(child: CircularProgressIndicator());
     }
 
     return ListView.builder(
@@ -439,6 +459,12 @@ Widget deliveryCard({
                           width: 60,
                           height: 60,
                           fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => Image.asset(
+                            'assets/images/noimage.png',
+                            width: 60,
+                            height: 60,
+                            fit: BoxFit.cover,
+                          ),
                         )
                             : Image.asset(
                           'assets/images/noimage.png',
