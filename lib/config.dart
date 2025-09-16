@@ -27,5 +27,8 @@ class Config {
   static const double tiltSlow = 60.0;
   static const double tiltMedium = 52.0;
   static const double tiltFast = 45.0;
+
+  // Navigation completion settings
+  static const double arrivalThresholdMeters = 50.0; // Consider arrived when within this distance
 }
 
