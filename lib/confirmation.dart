@@ -5,10 +5,11 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
+import 'package:file_picker/file_picker.dart';
 import 'firebase_options.dart';
 
 class ConfirmationPage extends StatefulWidget {
-  final String? deliveryCode; // This matches what's passed from GoogleMapPage
+  final String? deliveryCode;
   final String? deliveryAddress;
   final dynamic deliveryLocation;
   final String? deliveryStatus;
@@ -56,9 +57,9 @@ class Recipient {
   Recipient({required this.name, required this.email, required this.address});
 
   factory Recipient.fromMap(Map<String, dynamic> m) => Recipient(
-    name: m['recipientName'] ?? 'Customer',
+    name: m['recipientName'] ?? '',
     email: m['recipientEmail'] ?? '',
-    address: m['address'] ?? 'Unknown Address',
+    address: m['address'] ?? '',
   );
 }
 
@@ -72,8 +73,10 @@ class DeliveryItem {
   });
 
   factory DeliveryItem.fromMap(Map<String, dynamic> m) => DeliveryItem(
-    itemID: m['itemID'] ?? 'N/A',
-    quantity: (m['quantity'] is int) ? m['quantity'] : int.tryParse(m['quantity'].toString()) ?? 0,
+    itemID: m['itemID'] ?? '',
+    quantity: (m['quantity'] is int)
+        ? m['quantity']
+        : int.tryParse(m['quantity'].toString()) ?? 0,
   );
 }
 
@@ -81,11 +84,20 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
   DeliveryPersonnel? deliveryPersonnel;
   Recipient? recipient;
   List<DeliveryItem> deliveryItems = [];
+
+  DateTime? deliveryDateTime;
   String? deliveryDateFormatted;
+  String? deliveryTimeFormatted;
+
   String? deliveryStatus;
   bool _isLoading = true;
   Map<String, dynamic>? deliveryData;
   String? errorMessage;
+
+  String? _deliveryDocId;
+
+  File? _imageFile;
+  final ImagePicker _picker = ImagePicker();
 
   @override
   void initState() {
@@ -95,15 +107,11 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
 
   Future<void> _loadData() async {
     try {
-      // Initialize Firebase
       if (Firebase.apps.isEmpty) {
         await Firebase.initializeApp(
           options: DefaultFirebaseOptions.currentPlatform,
         );
       }
-
-      // Debug print to check what delivery code we're looking for
-      debugPrint("Looking for delivery with code: ${widget.deliveryCode}");
 
       if (widget.deliveryCode == null || widget.deliveryCode!.isEmpty) {
         if (mounted) {
@@ -115,16 +123,12 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
         return;
       }
 
-      // FIRST: Try to get the document directly using the deliveryCode as the document ID
       DocumentSnapshot deliveryDoc = await FirebaseFirestore.instance
           .collection('delivery')
-          .doc(widget.deliveryCode) // Use the deliveryCode directly as document ID
+          .doc(widget.deliveryCode)
           .get();
 
-      // SECOND: If not found by ID, try to query by the 'code' field
       if (!deliveryDoc.exists) {
-        debugPrint("Document not found by ID, trying query by 'code' field...");
-
         QuerySnapshot querySnapshot = await FirebaseFirestore.instance
             .collection('delivery')
             .where('code', isEqualTo: widget.deliveryCode)
@@ -133,47 +137,54 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
 
         if (querySnapshot.docs.isNotEmpty) {
           deliveryDoc = querySnapshot.docs.first;
-          debugPrint("Found document via query with ID: ${deliveryDoc.id}");
         }
-      } else {
-        debugPrint("Found document directly with ID: ${deliveryDoc.id}");
       }
 
       if (deliveryDoc.exists) {
+        _deliveryDocId = deliveryDoc.id;
+
         deliveryData = deliveryDoc.data() as Map<String, dynamic>;
-
-        // Debug print to see the actual data structure
-        debugPrint("Document data keys: ${deliveryData!.keys.toList()}");
-        debugPrint("Document data: $deliveryData");
-
-        // Extract recipient info from delivery document
         recipient = Recipient.fromMap(deliveryData!);
 
-        // Format delivery date
         if (deliveryData!['deliveryDate'] != null) {
-          // Handle different date formats
-          if (deliveryData!['deliveryDate'] is Timestamp) {
-            final date = (deliveryData!['deliveryDate'] as Timestamp).toDate();
-            deliveryDateFormatted = DateFormat('yyyy-MM-dd - HH:mm').format(date);
-          } else if (deliveryData!['deliveryDate'] is String) {
-            // Parse the string format "16 September 2025 at 00:10:10 UTC+8"
+          final dyn = deliveryData!['deliveryDate'];
+
+          if (dyn is Timestamp) {
+            deliveryDateTime = (dyn as Timestamp).toDate().toLocal();
+          } else if (dyn is String) {
+            DateTime? parsed;
             try {
-              final dateString = deliveryData!['deliveryDate'].replaceAll(' at ', ' ');
-              final date = DateFormat('d MMMM yyyy HH:mm:ss').parse(dateString);
-              deliveryDateFormatted = DateFormat('yyyy-MM-dd - HH:mm').format(date);
-            } catch (e) {
-              deliveryDateFormatted = deliveryData!['deliveryDate'];
+              parsed = DateTime.tryParse(dyn);
+              if (parsed != null) parsed = parsed.toLocal();
+            } catch (_) {
+              parsed = null;
             }
+            if (parsed == null) {
+              try {
+                String cleaned = dyn.replaceAll(' at ', ' ');
+                cleaned = cleaned.replaceAll(RegExp(r'UTC.*$'), '').trim();
+                parsed = DateFormat('d MMMM yyyy HH:mm:ss').parse(cleaned);
+              } catch (e) {
+                debugPrint('string parse failed: $e');
+                parsed = null;
+              }
+            }
+            if (parsed != null) {
+              deliveryDateTime = parsed.toLocal();
+            }
+          }
+
+          if (deliveryDateTime != null) {
+            deliveryDateFormatted =
+                DateFormat('MMM d, yyyy').format(deliveryDateTime!);
+            deliveryTimeFormatted =
+                DateFormat('h:mma').format(deliveryDateTime!).toLowerCase();
           }
         }
 
-        // Get delivery status
         deliveryStatus = deliveryData!['status']?.toString() ?? 'Unknown Status';
 
-        // Get employee ID and fetch personnel
         final String employeeID = deliveryData!['employedID']?.toString() ?? '';
-        debugPrint("Looking for employee with ID: $employeeID");
-
         if (employeeID.isNotEmpty) {
           final personnelQuery = await FirebaseFirestore.instance
               .collection('users')
@@ -181,18 +192,13 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
               .get();
 
           if (personnelQuery.docs.isNotEmpty) {
-            deliveryPersonnel = DeliveryPersonnel.fromMap(personnelQuery.docs.first.data());
-            debugPrint("Found delivery personnel: ${deliveryPersonnel!.name}");
-          } else {
-            debugPrint("No personnel found with employeeID: $employeeID");
+            deliveryPersonnel =
+                DeliveryPersonnel.fromMap(personnelQuery.docs.first.data());
           }
         }
 
-        // Process delivery items - using the exact field names from your data
         final List<dynamic> itemsData = deliveryData!['deliveryItems'] ?? [];
         List<DeliveryItem> newDeliveryItems = [];
-        debugPrint("Found ${itemsData.length} delivery items");
-
         for (var itemData in itemsData) {
           if (itemData is Map<String, dynamic>) {
             newDeliveryItems.add(DeliveryItem.fromMap(itemData));
@@ -206,10 +212,10 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
           });
         }
       } else {
-        // Document doesn't exist
         if (mounted) {
           setState(() {
-            errorMessage = 'Delivery with code ${widget.deliveryCode} not found';
+            errorMessage =
+            'Delivery with code ${widget.deliveryCode} not found';
             _isLoading = false;
           });
         }
@@ -225,85 +231,170 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
     }
   }
 
+  // ✅ Camera choice (front/rear)
+  Future<void> _chooseCamera() async {
+    final choice = await showDialog<CameraDevice>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Select Camera"),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, CameraDevice.rear),
+            child: const Text("Rear Camera"),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, CameraDevice.front),
+            child: const Text("Front Camera"),
+          ),
+        ],
+      ),
+    );
+
+    if (choice != null) {
+      _takePhoto(choice);
+    }
+  }
+
+  // ✅ Take photo
+  Future<void> _takePhoto(CameraDevice camera) async {
+    final XFile? pickedFile = await _picker.pickImage(
+      source: ImageSource.camera,
+      preferredCameraDevice: camera,
+    );
+    if (pickedFile != null) {
+      setState(() {
+        _imageFile = File(pickedFile.path);
+      });
+    }
+  }
+
+  // ✅ Gallery
+  Future<void> _pickFromGallery() async {
+    final XFile? pickedFile =
+    await _picker.pickImage(source: ImageSource.gallery);
+    if (pickedFile != null) {
+      setState(() {
+        _imageFile = File(pickedFile.path);
+      });
+    }
+  }
+
+  // ✅ File picker
+  Future<void> _pickFile() async {
+    final result = await FilePicker.platform.pickFiles(type: FileType.image);
+    if (result != null && result.files.single.path != null) {
+      setState(() {
+        _imageFile = File(result.files.single.path!);
+      });
+    }
+  }
+
+  void _showImageSourceActionSheet() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (BuildContext context) {
+        return SafeArea(
+          child: Wrap(
+            children: [
+              ListTile(
+                leading: const Icon(Icons.camera_alt),
+                title: const Text("Take Photo"),
+                onTap: () {
+                  Navigator.pop(context);
+                  _chooseCamera();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_library),
+                title: const Text("Choose from Gallery"),
+                onTap: () {
+                  Navigator.pop(context);
+                  _pickFromGallery();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.upload_file),
+                title: const Text("Upload File"),
+                onTap: () {
+                  Navigator.pop(context);
+                  _pickFile();
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  // ✅ Show error message if no image is uploaded
+  void _showImageRequiredError() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Please upload proof of delivery before confirming'),
+        backgroundColor: Colors.red,
+        duration: Duration(seconds: 3),
+      ),
+    );
+  }
+
+  // ✅ Handle confirmation with image validation
+  Future<void> _handleConfirmation() async {
+    if (_imageFile == null) {
+      _showImageRequiredError();
+      return;
+    }
+
+    final docIdToUpdate = _deliveryDocId ?? widget.deliveryCode;
+    if (docIdToUpdate != null && docIdToUpdate.isNotEmpty) {
+      await FirebaseFirestore.instance
+          .collection('delivery')
+          .doc(docIdToUpdate)
+          .update({
+        'status': 'Delivered',
+        'deliveredAt': FieldValue.serverTimestamp(),
+      });
+    }
+
+    if (mounted) {
+      Navigator.pop(context);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return Scaffold(
-        appBar: AppBar(
-          backgroundColor: Colors.white,
-          elevation: 0,
-          title: const Text(
-            'Delivery Confirmation',
-            style: TextStyle(color: Color(0xFF1B6C07), fontWeight: FontWeight.bold),
-          ),
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back, color: Colors.black),
-            onPressed: () => Navigator.pop(context),
-          ),
-        ),
-        body: const Center(child: CircularProgressIndicator()),
-      );
+      return _loadingScreen();
     }
 
     if (errorMessage != null) {
-      return Scaffold(
-        appBar: AppBar(
-          backgroundColor: Colors.white,
-          elevation: 0,
-          title: const Text(
-            'Delivery Confirmation',
-            style: TextStyle(color: Color(0xFF1B6C07), fontWeight: FontWeight.bold),
-          ),
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back, color: Colors.black),
-            onPressed: () => Navigator.pop(context),
-          ),
-        ),
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(20.0),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.error_outline, size: 64, color: Colors.red),
-                const SizedBox(height: 20),
-                Text(
-                  errorMessage!,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 16),
-                ),
-                const SizedBox(height: 20),
-                ElevatedButton(
-                  onPressed: _loadData,
-                  child: const Text('Retry'),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
+      return _errorScreen();
     }
 
     if (deliveryData == null) {
       return Scaffold(
-        appBar: AppBar(
-          backgroundColor: Colors.white,
-          elevation: 0,
-        ),
-        body: const Center(
-          child: Text('Delivery data is null'),
-        ),
+        appBar: AppBar(backgroundColor: Colors.white, elevation: 0),
+        body: const Center(child: Text('Delivery data is null')),
       );
     }
 
     return Scaffold(
+      backgroundColor: Colors.white,
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
         title: const Text(
           'Delivery Confirmation',
-          style: TextStyle(color: Color(0xFF1B6C07), fontWeight: FontWeight.bold),
+          style: TextStyle(
+            color: Color(0xFF1B6C07),
+            fontWeight: FontWeight.bold,
+            fontSize: 22,
+          ),
         ),
+        centerTitle: true,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.black),
           onPressed: () => Navigator.pop(context),
@@ -314,127 +405,284 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Delivery Code
-            if (widget.deliveryCode != null)
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Delivery Code: ${widget.deliveryCode}',
-                    style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.green),
-                  ),
-                  const SizedBox(height: 10),
-                ],
-              ),
-
-            // Delivery Status
-            Text(
-              'Status: $deliveryStatus',
-              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.blue),
-            ),
-            const SizedBox(height: 5),
-
-            // Delivery Date
+            const SizedBox(height: 15),
             Text(
               'Date: ${deliveryDateFormatted ?? "N/A"}',
-              style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold),
+              style: const TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+              ),
             ),
-            const SizedBox(height: 5),
+            const SizedBox(height: 20),
+            Text(
+              'From: ${deliveryPersonnel?.name ?? "N/A"} | Greenstem Business Software | [${deliveryPersonnel?.email ?? "N/A"}]',
+              style: const TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                color: Colors.black,
+              ),
+            ),
+            const SizedBox(height: 15),
+            Text(
+              'To: ${recipient?.name ?? "N/A"} | ${recipient?.email ?? "N/A"} | ${recipient?.address ?? "N/A"}',
+              style: const TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                color: Colors.black,
+              ),
+            ),
+            const SizedBox(height: 30),
 
-            // Delivery Personnel
-            if (deliveryPersonnel != null)
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+            /// Items Table
+            Table(
+              border: TableBorder.all(color: Colors.grey.shade300),
+              columnWidths: const {
+                0: FlexColumnWidth(2),
+                1: FlexColumnWidth(1),
+                2: FlexColumnWidth(2),
+                3: FlexColumnWidth(2),
+                4: FlexColumnWidth(1.5),
+              },
+              children: [
+                const TableRow(
+                  children: [
+                    Padding(
+                        padding: EdgeInsets.all(8),
+                        child: Text('Item(s) Delivered',
+                            style: TextStyle(
+                                fontSize: 10.5, fontWeight: FontWeight.bold))),
+                    Padding(
+                        padding: EdgeInsets.all(8),
+                        child: Text('Quantity',
+                            style: TextStyle(
+                                fontSize: 10.5, fontWeight: FontWeight.bold))),
+                    Padding(
+                        padding: EdgeInsets.all(8),
+                        child: Text('Tracking Number',
+                            style: TextStyle(
+                                fontSize: 10.5, fontWeight: FontWeight.bold))),
+                    Padding(
+                        padding: EdgeInsets.all(8),
+                        child: Text('Delivery Date',
+                            style: TextStyle(
+                                fontSize: 10.5, fontWeight: FontWeight.bold))),
+                    Padding(
+                        padding: EdgeInsets.all(8),
+                        child: Text('Delivery Time',
+                            style: TextStyle(
+                                fontSize: 10.5, fontWeight: FontWeight.bold))),
+                  ],
+                ),
+                ...deliveryItems.map((item) => TableRow(
+                  children: [
+                    Padding(
+                        padding: const EdgeInsets.all(8),
+                        child: Text(item.itemID,
+                            style: const TextStyle(fontSize: 10.5))),
+                    Padding(
+                        padding: const EdgeInsets.all(8),
+                        child: Text(item.quantity.toString(),
+                            style: const TextStyle(fontSize: 10.5))),
+                    Padding(
+                        padding: const EdgeInsets.all(8),
+                        child: Text(widget.deliveryCode ?? 'N/A',
+                            style: const TextStyle(fontSize: 10.5))),
+                    Padding(
+                        padding: const EdgeInsets.all(8),
+                        child: Text(deliveryDateFormatted ?? 'N/A',
+                            style: const TextStyle(fontSize: 10.5))),
+                    Padding(
+                        padding: const EdgeInsets.all(8),
+                        child: Text(deliveryTimeFormatted ?? 'N/A',
+                            style: const TextStyle(fontSize: 10.5))),
+                  ],
+                )),
+              ],
+            ),
+
+            const SizedBox(height: 30),
+
+            /// Confirmation Summary
+            const Text(
+              'Confirmation Summary',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Colors.black,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text.rich(
+              TextSpan(
                 children: [
-                  Text(
-                    "Driver: ${deliveryPersonnel!.name} | ${deliveryPersonnel!.employeeID}",
-                    style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold),
+                  const TextSpan(
+                    text: 'Your items were delivered on ',
+                    style: TextStyle(fontSize: 14),
                   ),
-                  const SizedBox(height: 5),
+                  TextSpan(
+                    text: deliveryDateFormatted ?? 'N/A',
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const TextSpan(
+                    text: ', at ',
+                    style: TextStyle(fontSize: 14),
+                  ),
+                  TextSpan(
+                    text: deliveryTimeFormatted ?? 'N/A',
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const TextSpan(
+                    text:
+                    '. Please check the items and contact us if there are any issues.',
+                    style: TextStyle(fontSize: 14),
+                  ),
                 ],
               ),
+              style: const TextStyle(height: 1.5),
+            ),
 
-            // Recipient Information
-            if (recipient != null)
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    "Recipient: ${recipient!.name}",
-                    style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 5),
-                  Text(
-                    "Email: ${recipient!.email}",
-                    style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 5),
-                  Text(
-                    "Address: ${recipient!.address}",
-                    style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 20),
-                ],
-              ),
+            const SizedBox(height: 20),
 
-            // Delivery Items Table
-            if (deliveryItems.isNotEmpty)
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Delivery Items:',
-                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 10),
-                  Table(
-                    border: TableBorder.all(color: Colors.grey.shade300),
-                    columnWidths: const {
-                      0: FlexColumnWidth(2),
-                      1: FlexColumnWidth(1),
-                    },
-                    children: [
-                      const TableRow(
-                        children: [
-                          Padding(padding: EdgeInsets.all(8), child: Text('Item ID', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold))),
-                          Padding(padding: EdgeInsets.all(8), child: Text('Quantity', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold))),
-                        ],
+            // Image upload section with clear instructions
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SizedBox(height: 10),
+                GestureDetector(
+                  onTap: _showImageSourceActionSheet,
+                  child: Container(
+                    height: 140,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade300,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: _imageFile == null
+                        ? const Center(
+                      child: Icon(Icons.camera_alt_outlined,
+                          size: 40, color: Colors.black54),
+                    )
+                        : ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: Image.file(
+                        _imageFile!,
+                        fit: BoxFit.cover,
+                        width: double.infinity,
                       ),
-                      ...deliveryItems.map((item) => TableRow(
-                        children: [
-                          Padding(padding: const EdgeInsets.all(8), child: Text(item.itemID, style: const TextStyle(fontSize: 10.5))),
-                          Padding(padding: const EdgeInsets.all(8), child: Text(item.quantity.toString(), style: const TextStyle(fontSize: 10.5))),
-                        ],
-                      )),
-                    ],
+                    ),
                   ),
-                  const SizedBox(height: 20),
-                ],
-              ),
+                ),
+              ],
+            ),
 
-            // Location Information
-            if (deliveryData!['location'] != null)
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Location:',
-                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+            const SizedBox(height: 20),
+
+            /// Buttons
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFD7D7D7),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(5),
+                    ),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 37,
+                      vertical: 10,
+                    ),
                   ),
-                  const SizedBox(height: 5),
-                  Text(
-                    deliveryData!['location'].toString(),
-                    style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold),
+                  child: const Text(
+                    'Cancel',
+                    style: TextStyle(
+                      color: Color(0xFF8E8989),
+                    ),
                   ),
-                  const SizedBox(height: 20),
-                ],
-              ),
+                ),
+                const SizedBox(width: 20),
+                ElevatedButton(
+                  onPressed: _handleConfirmation,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF1B6C07),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 35, vertical: 10),
+                  ),
+                  child: const Text(
+                    'Confirm',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
       ),
     );
   }
+
+  /// Loading & Error Screens
+  Widget _loadingScreen() => Scaffold(
+    appBar: AppBar(
+      backgroundColor: Colors.white,
+      elevation: 0,
+      title: const Text(
+        'Delivery Confirmation',
+        style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+      ),
+      leading: IconButton(
+        icon: const Icon(Icons.arrow_back, color: Colors.black),
+        onPressed: () => Navigator.pop(context),
+      ),
+    ),
+    body: const Center(child: CircularProgressIndicator()),
+  );
+
+  Widget _errorScreen() => Scaffold(
+    appBar: AppBar(
+      backgroundColor: Colors.white,
+      elevation: 0,
+      title: const Text(
+        'Delivery Confirmation',
+        style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+      ),
+      leading: IconButton(
+        icon: const Icon(Icons.arrow_back, color: Colors.black),
+        onPressed: () => Navigator.pop(context),
+      ),
+    ),
+    body: Center(
+      child: Padding(
+        padding: const EdgeInsets.all(20.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.error_outline, size: 64, color: Colors.red),
+            const SizedBox(height: 20),
+            Text(
+              errorMessage!,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 16),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: _loadData,
+              child: const Text('Retry'),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
 }
