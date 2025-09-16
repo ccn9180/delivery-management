@@ -1,455 +1,895 @@
-import 'dart:io';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_core/firebase_core.dart';
+import 'package:delivery/profile_page.dart';
+import 'package:delivery/widget/header.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
-import 'firebase_options.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'DeliveryHistory.dart';
+import 'google_map.dart';
 
-class ConfirmationPage extends StatefulWidget {
-  final String? deliveryCode;
-  final String? deliveryAddress;
-  final dynamic deliveryLocation;
-  final String? deliveryStatus;
-  final List<Map<String, dynamic>>? deliveryItems;
+class Delivery {
+  final String code; // This is the document ID
+  final String address;
+  final DateTime date;
+  final String status;
+  final List<Map<String, dynamic>> items;
+  final String employeeID; // Add employeeID to match Firebase
 
-  const ConfirmationPage({
-    super.key,
-    this.deliveryCode,
-    this.deliveryAddress,
-    this.deliveryLocation,
-    this.deliveryStatus,
-    this.deliveryItems,
+  Delivery({
+    required this.code,
+    required this.address,
+    required this.date,
+    required this.status,
+    required this.items,
+    required this.employeeID,
   });
 
+  factory Delivery.fromDoc(DocumentSnapshot doc) {
+    final data = doc.data() as Map<String, dynamic>;
+    return Delivery(
+      code: doc.id, // Use document ID as code
+      address: data['address'] ?? '',
+      date: (data['deliveryDate'] as Timestamp).toDate().toLocal(),
+      status: data['status'] ?? 'New Order',
+      items: List<Map<String, dynamic>>.from(data['deliveryItems'] ?? []),
+      employeeID: data['employeeID'] ?? '', // Get employeeID from Firebase
+    );
+  }
+}
+
+// Match the employee
+Future<String?> fetchEmployeeCode() async {
+  final user = FirebaseAuth.instance.currentUser;
+  if (user == null) return null;
+
+  final userDoc = await FirebaseFirestore.instance
+      .collection('users')
+      .doc(user.uid)
+      .get();
+
+  return userDoc.data()?['employeeID'];
+}
+
+// Only fetch sysdate delivery
+Stream<List<Delivery>> fetchEmployeeDeliveries() async* {
+  final employeeCode = await fetchEmployeeCode();
+  if (employeeCode == null) {
+    yield [];
+    return;
+  }
+
+  final now = DateTime.now();
+  final startOfDayLocal = DateTime(now.year, now.month, now.day, 0, 0, 0);
+  final endOfDayLocal = DateTime(now.year, now.month, now.day, 23, 59, 59);
+
+  final startOfDay = startOfDayLocal.toUtc();
+  final endOfDay = endOfDayLocal.toUtc();
+
+  yield* FirebaseFirestore.instance
+      .collection('delivery')
+      .where('employeeID', isEqualTo: employeeCode)
+      .where('deliveryDate', isGreaterThanOrEqualTo: startOfDay)
+      .where('deliveryDate', isLessThanOrEqualTo: endOfDay)
+      .snapshots()
+      .map((snapshot) =>
+      snapshot.docs.map((doc) => Delivery.fromDoc(doc)).toList());
+}
+
+class ConfirmationPage extends StatefulWidget {
+  const ConfirmationPage({super.key});
   @override
   State<ConfirmationPage> createState() => _ConfirmationPageState();
 }
 
-class DeliveryPersonnel {
-  final String name;
-  final String email;
-  final String employeeID;
-  final String phoneNumber;
-
-  DeliveryPersonnel({
-    required this.name,
-    required this.email,
-    required this.employeeID,
-    required this.phoneNumber,
-  });
-
-  factory DeliveryPersonnel.fromMap(Map<String, dynamic> m) => DeliveryPersonnel(
-    name: m['name'] ?? '',
-    email: m['email'] ?? '',
-    employeeID: m['employeeID'] ?? '',
-    phoneNumber: m['phoneNumber'] ?? '',
-  );
-}
-
-class Recipient {
-  final String name;
-  final String email;
-  final String location;
-
-  Recipient({required this.name, required this.email, required this.location});
-
-  factory Recipient.fromMap(Map<String, dynamic> m) => Recipient(
-    name: m['name'] ?? '',
-    email: m['email'] ?? '',
-    location: m['location'] ?? '',
-  );
-}
-
-class DeliveryItem {
-  final String item;
-  final int qty;
-  final String tracking;
-  final String date;
-  final String time;
-
-  DeliveryItem({
-    required this.item,
-    required this.qty,
-    required this.tracking,
-    required this.date,
-    required this.time,
-  });
-
-  factory DeliveryItem.fromMap(Map<String, dynamic> m) {
-    String formattedDate = '';
-    String formattedTime = '';
-
-    if (m['date'] != null) {
-      if (m['date'] is Timestamp) {
-        final dt = (m['date'] as Timestamp).toDate();
-        formattedDate = DateFormat('yyyy-MM-dd').format(dt);
-      } else {
-        formattedDate = m['date'].toString();
-      }
-    }
-
-    if (m['time'] != null) {
-      if (m['time'] is Timestamp) {
-        final dt = (m['time'] as Timestamp).toDate();
-        formattedTime = DateFormat('HH:mm').format(dt);
-      } else {
-        formattedTime = m['time'].toString();
-      }
-    }
-
-    return DeliveryItem(
-      item: m['itemName'] ?? m['item'] ?? '',
-      qty: (m['quantity'] is int) ? m['quantity'] : int.tryParse(m['quantity'].toString()) ?? 0,
-      tracking: m['tracking'] ?? m['itemID'] ?? '',
-      date: formattedDate,
-      time: formattedTime,
-    );
-  }
-}
-
 class _ConfirmationPageState extends State<ConfirmationPage> {
-  DeliveryPersonnel? deliveryPersonnel;
-  Recipient? recipient;
-  List<DeliveryItem> deliveryItems = [];
-  String? deliveryDateFormatted;
-  String? deliveryStatus;
-  bool _isLoading = true;
-  bool _hasError = false;
-  bool _dataLoaded = false;
+  int _selectedIndex = 1;
+  late final List<Widget> _pages;
 
   @override
   void initState() {
     super.initState();
-
-    // Create a fallback recipient using the delivery address
-    recipient = Recipient(
-      name: "Delivery Location",
-      email: "",
-      location: widget.deliveryAddress ?? "Unknown Address",
-    );
-
-    // Use fallback data immediately and try to load real data in background
-    _setFallbackData();
-    _loadDataInBackground();
-  }
-
-  Future<void> _loadDataInBackground() async {
-    try {
-      // Initialize Firebase if not already initialized
-      if (Firebase.apps.isEmpty) {
-        await Firebase.initializeApp(
-          options: DefaultFirebaseOptions.currentPlatform,
-        );
-      }
-
-      await _fetchFromFirestore();
-    } catch (e) {
-      debugPrint("Error loading data: $e");
-      // Keep the fallback data if real data loading fails
-    }
-
-    if (mounted) {
-      setState(() {
-        _isLoading = false;
-        _dataLoaded = true;
-      });
-    }
-  }
-
-  Future<void> _fetchFromFirestore() async {
-    if (widget.deliveryCode == null) {
-      return; // Keep fallback data
-    }
-
-    try {
-      // Fetch the main delivery document
-      final deliveryDoc = await FirebaseFirestore.instance
-          .collection('delivery')
-          .doc(widget.deliveryCode)
-          .get();
-
-      if (deliveryDoc.exists) {
-        final deliveryData = deliveryDoc.data()!;
-
-        // Format delivery date
-        if (deliveryData['deliveryDate'] != null && deliveryData['deliveryDate'] is Timestamp) {
-          final date = (deliveryData['deliveryDate'] as Timestamp).toDate();
-          deliveryDateFormatted = DateFormat('yyyy-MM-dd - HH:mm').format(date);
-        }
-
-        // Get delivery status
-        deliveryStatus = deliveryData['status']?.toString() ?? 'Unknown Status';
-
-        // Get employee ID from delivery data
-        final String employeeID = deliveryData['employeeID']?.toString() ?? '25PG0001';
-
-        // Fetch delivery personnel from users collection
-        final personnelQuery = await FirebaseFirestore.instance
-            .collection('users')
-            .where('employeeID', isEqualTo: employeeID)
-            .get();
-
-        DeliveryPersonnel? newPersonnel;
-        if (personnelQuery.docs.isNotEmpty) {
-          newPersonnel = DeliveryPersonnel.fromMap(personnelQuery.docs.first.data());
-        }
-
-        List<DeliveryItem> newDeliveryItems = [];
-        // Process delivery items
-        final List<Map<String, dynamic>> itemsData =
-        List<Map<String, dynamic>>.from(deliveryData['deliveryItems'] ?? []);
-
-        // Fetch detailed item information for each delivery item
-        for (var itemData in itemsData) {
-          final String itemID = itemData['itemID']?.toString() ?? '';
-          if (itemID.isNotEmpty) {
-            final itemDoc = await FirebaseFirestore.instance
-                .collection('items')
-                .doc(itemID)
-                .get();
-
-            if (itemDoc.exists) {
-              final itemDetail = itemDoc.data()!;
-              newDeliveryItems.add(DeliveryItem.fromMap({
-                ...itemDetail,
-                'quantity': itemData['quantity'],
-                'itemID': itemID,
-                'date': deliveryData['deliveryDate'],
-              }));
-            }
-          }
-        }
-
-        if (mounted) {
-          setState(() {
-            if (newPersonnel != null) {
-              deliveryPersonnel = newPersonnel;
-            }
-            if (newDeliveryItems.isNotEmpty) {
-              deliveryItems = newDeliveryItems;
-            }
-            _hasError = false;
-          });
-        }
-      }
-    } catch (e) {
-      debugPrint("Error fetching Firestore data: $e");
-      // Keep the existing fallback data
-    }
-  }
-
-  void _setFallbackData() {
-    deliveryPersonnel = DeliveryPersonnel(
-      name: "Test Driver",
-      email: "driver@example.com",
-      employeeID: "25PG0001",
-      phoneNumber: "012-3456789",
-    );
-    deliveryDateFormatted = "2025-09-16 - 14:30";
-    deliveryStatus = "In Transit";
-
-    // Add some fallback items
-    deliveryItems = [
-      DeliveryItem(
-        item: "Shell Helix Ultra 5w40",
-        qty: 2,
-        tracking: "ITM00001",
-        date: "2025-09-16",
-        time: "14:30",
-      ),
-      DeliveryItem(
-        item: "Engine Oil Filter",
-        qty: 1,
-        tracking: "ITM00002",
-        date: "2025-09-16",
-        time: "14:30",
-      ),
+    _pages = [
+      const DeliveryHistory(),
+      const DeliveryListPage(),
+      const ProfilePage()
     ];
-
-    _hasError = true;
-  }
-
-  File? _imageFile;
-  final ImagePicker _picker = ImagePicker();
-
-  Future<void> _takePhoto() async {
-    final XFile? pickedFile = await _picker.pickImage(source: ImageSource.camera);
-    if (pickedFile != null) {
-      setState(() {
-        _imageFile = File(pickedFile.path);
-      });
-    }
-  }
-
-  bool _isConfirmed = false;
-  bool _isCancelled = false;
-
-  void _handleCancel() {
-    setState(() {
-      _isCancelled = true;
-      _isConfirmed = false;
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Cancelled")),
-    );
-  }
-
-  void _handleConfirm() {
-    setState(() {
-      _isConfirmed = true;
-      _isCancelled = false;
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Delivery Confirmed")),
-    );
   }
 
   @override
   Widget build(BuildContext context) {
-    // Show loading only for a brief moment, then show data
-    if (_isLoading && !_dataLoaded) {
-      return Scaffold(
-        appBar: AppBar(
+    return Scaffold(
+      body: IndexedStack(
+        index: _selectedIndex,
+        children: _pages,
+      ),
+      bottomNavigationBar: Theme(
+        data: Theme.of(context).copyWith(
+          splashColor: Colors.transparent,
+          highlightColor: Colors.transparent,
+          splashFactory: NoSplash.splashFactory,
+        ),
+        child: BottomNavigationBar(
           backgroundColor: Colors.white,
-          elevation: 0,
-          title: const Text(
-            'Delivery Confirmation',
-            style: TextStyle(color: Color(0xFF1B6C07), fontWeight: FontWeight.bold),
-          ),
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back, color: Colors.black),
-            onPressed: () => Navigator.pop(context),
+          currentIndex: _selectedIndex,
+          selectedItemColor: Color(0xFF1B6C07),
+          unselectedItemColor: Colors.grey,
+          selectedIconTheme: IconThemeData(size: 37),
+          unselectedIconTheme: IconThemeData(size: 24),
+          showSelectedLabels: false,
+          showUnselectedLabels: false,
+          onTap: (index) {
+            setState(() {
+              _selectedIndex = index;
+            });
+          },
+          items: [
+            BottomNavigationBarItem(
+              icon: Icon(Icons.history),
+              label: 'History',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.home),
+              label: 'Deliveries List',
+            ),
+            BottomNavigationBarItem(
+                icon: Icon(Icons.person), label: 'Profile'),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class DeliveryListPage extends StatelessWidget {
+  const DeliveryListPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return DefaultTabController(
+      length: 3,
+      child: Scaffold(
+        backgroundColor: Colors.white,
+        body: SafeArea(
+          child: Column(
+            children: [
+              // Header
+              PageHeader(
+                title: "Delivery List",
+                extraWidget: StreamBuilder<List<Delivery>>(
+                  stream: fetchEmployeeDeliveries(),
+                  builder: (context, snapshot) {
+                    final deliveries = snapshot.data ?? [];
+                    final total = deliveries.length;
+                    final delivered =
+                        deliveries.where((d) => d.status == 'Delivered').length;
+                    final progress = total == 0 ? 0.0 : delivered / total;
+
+                    return SizedBox(
+                      width: 50,
+                      height: 50,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          SizedBox(
+                            width: 46,
+                            height: 46,
+                            child: CircularProgressIndicator(
+                              value: progress,
+                              strokeWidth: 6,
+                              backgroundColor: Colors.grey.shade200,
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                delivered == total && total != 0
+                                    ? Colors.green
+                                    : Colors.orange,
+                              ),
+                            ),
+                          ),
+                          Text(
+                            "$delivered/$total",
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+
+              // TabBar
+              const TabBar(
+                labelColor: Color(0xFF1B6C07),
+                unselectedLabelColor: Colors.grey,
+                labelStyle: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 15,
+                ),
+                indicatorColor: Color(0xFF1B6C07),
+                dividerColor: Colors.transparent,
+                indicatorWeight: 2,
+                tabs: [
+                  Tab(text: "New Order"),
+                  Tab(text: "On-Going"),
+                  Tab(text: "Delivered"),
+                ],
+              ),
+
+              const SizedBox(height: 10),
+
+              // TabBarView
+              Expanded(
+                child: StreamBuilder<List<Delivery>>(
+                  stream: fetchEmployeeDeliveries(),
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const Center(
+                        child: CircularProgressIndicator(),
+                      );
+                    }
+
+                    final deliveries = snapshot.data ?? [];
+
+                    final newOrder = deliveries
+                        .where((d) => d.status == 'New Order')
+                        .toList();
+                    final ongoing = deliveries
+                        .where((d) => d.status == 'On-Going')
+                        .toList();
+                    final finished = deliveries
+                        .where((d) => d.status == 'Delivered')
+                        .toList();
+
+                    final dateFormat = DateFormat('dd/MM/yyyy');
+                    final timeFormat = DateFormat('hh:mm a');
+
+                    List<Map<String, String>> mapList(List<Delivery> list) =>
+                        list
+                            .map(
+                              (d) => {
+                            'code': d.code, // Use document ID as code
+                            'address': d.address,
+                            'date': dateFormat.format(d.date),
+                            'time': timeFormat.format(d.date),
+                            'status': d.status,
+                            'employeeID': d.employeeID, // Pass employeeID
+                          },
+                        )
+                            .toList();
+
+                    return TabBarView(
+                      children: [
+                        DeliveryListTab(
+                          deliveries: mapList(newOrder),
+                          emptyMessages: "No new orders assigned today",
+                        ),
+                        DeliveryListTab(
+                          deliveries: mapList(ongoing),
+                          emptyMessages: "No on-going deliveries at the moment",
+                        ),
+                        DeliveryListTab(
+                          deliveries: mapList(finished),
+                          emptyMessages: "No deliveries have been completed yet",
+                        ),
+                      ],
+                    );
+                  },
+                ),
+              ),
+            ],
           ),
         ),
-        body: const Center(child: CircularProgressIndicator()),
+      ),
+    );
+  }
+}
+
+class DeliveryListTab extends StatefulWidget {
+  final List<Map<String, String>> deliveries;
+  final String emptyMessages;
+
+  const DeliveryListTab({
+    super.key,
+    required this.deliveries,
+    required this.emptyMessages,
+  });
+
+  @override
+  _DeliveryListTabState createState() => _DeliveryListTabState();
+}
+
+class _DeliveryListTabState extends State<DeliveryListTab>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+
+    if (widget.deliveries.isEmpty) {
+      return Center(
+          child: Text(
+            widget.emptyMessages,
+            style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
+            textAlign: TextAlign.center,
+          ),
       );
     }
 
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        title: const Text(
-          'Delivery Confirmation',
-          style: TextStyle(color: Color(0xFF1B6C07), fontWeight: FontWeight.bold),
-        ),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.black),
-          onPressed: () => Navigator.pop(context),
-        ),
-        actions: [
-          Align(
-            alignment: Alignment.topRight,
-            child: Padding(
-              padding: const EdgeInsets.only(right: 16.0),
-              child: Container(
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Colors.white,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black12,
-                      blurRadius: 4,
-                      offset: Offset(2, 2),
-                    ),
-                  ],
-                ),
-                padding: const EdgeInsets.all(8.0),
-                child: Icon(
-                  Icons.person,
-                  color: Color(0xFF1B6D07),
-                  size: 30,
-                ),
-              ),
+    return ListView.builder(
+      padding: EdgeInsets.all(16),
+      itemCount: widget.deliveries.length,
+      itemBuilder: (context, index) {
+        final d = widget.deliveries[index];
+        return Padding(
+          padding: EdgeInsets.fromLTRB(7, 0, 7, 16),
+          child: deliveryCard(
+            context: context,
+            code: d['code']!,
+            date: d['date']!,
+            time: d['time']!,
+            address: d['address']!,
+            status: d['status']!,
+            employeeID: d['employeeID']!, // Pass employeeID
+          ),
+        );
+      },
+    );
+  }
+}
+
+Widget deliveryCard({
+  required BuildContext context,
+  required String code,
+  required String date,
+  required String time,
+  required String address,
+  required String status,
+  required String employeeID, // Add employeeID parameter
+}) {
+  return GestureDetector(
+    onTap: () async {
+      final doc = await FirebaseFirestore.instance
+          .collection('delivery')
+          .doc(code) // Use code (document ID) to fetch
+          .get();
+
+      if (!doc.exists) return;
+
+      final data = doc.data() as Map<String, dynamic>;
+      final List<Map<String, dynamic>> deliveryItems =
+      List<Map<String, dynamic>>.from(data['deliveryItems'] ?? []);
+
+      // Get location from Firebase data
+      final GeoPoint? locationData = data['location'];
+      final LatLng? location = locationData != null
+          ? LatLng(locationData.latitude, locationData.longitude)
+          : null;
+
+      showGeneralDialog(
+        context: context,
+        barrierDismissible: true,
+        barrierLabel: "Delivery Details",
+        barrierColor: Colors.black.withOpacity(0.5),
+        transitionDuration: const Duration(milliseconds: 300),
+        pageBuilder: (context, anim1, anim2) {
+          return Center(
+            child: DeliveryDetailsPopUp(
+              code: code,
+              address: address,
+              status: status,
+              items: deliveryItems,
+              location: location,
+              employeeID: employeeID, // Pass employeeID
             ),
-          )
-        ],
+          );
+        },
+        transitionBuilder: (context, anim1, anim2, child) {
+          return ScaleTransition(
+            scale: CurvedAnimation(parent: anim1, curve: Curves.easeOutBack),
+            child: child,
+          );
+        },
+      );
+    },
+    child: Card(
+      color: Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: Colors.grey.shade100, width: 1.5),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
+      elevation: 3,
+      shadowColor: Colors.grey.shade100,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Delivery Code
-            if (widget.deliveryCode != null)
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Delivery Code: ${widget.deliveryCode}',
-                    style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.green),
+            const SizedBox(height: 5),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.grey.shade100, width: 1.5),
+                    borderRadius: BorderRadius.circular(6),
                   ),
-                  const SizedBox(height: 10),
-                ],
-              ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: FutureBuilder<DocumentSnapshot?>(
+                      future: FirebaseFirestore.instance
+                          .collection('delivery')
+                          .doc(code) // Use code (document ID)
+                          .get()
+                          .then((doc) async {
+                        if (!doc.exists) return null;
 
-            // Delivery Status
-            Text(
-              'Status: $deliveryStatus',
-              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.blue),
-            ),
-            const SizedBox(height: 5),
+                        final data = doc.data() as Map<String, dynamic>;
+                        final items = List<Map<String, dynamic>>.from(
+                          data['deliveryItems'] ?? [],
+                        );
 
-            // Delivery Date
-            Text(
-              'Date: ${deliveryDateFormatted ?? "N/A"}',
-              style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 5),
+                        if (items.isEmpty) return null;
 
-            // Delivery Personnel
-            Text(
-              "From: ${deliveryPersonnel?.name ?? "Unknown"} | ${deliveryPersonnel?.employeeID ?? "N/A"} | [${deliveryPersonnel?.email ?? "N/A"}]",
-              style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 5),
+                        final firstItemId = items.first['itemID'];
+                        return FirebaseFirestore.instance
+                            .collection('items')
+                            .doc(firstItemId)
+                            .get();
+                      }),
+                      builder: (context, snapshot) {
+                        if (snapshot.connectionState ==
+                            ConnectionState.waiting) {
+                          return const SizedBox(
+                            width: 60,
+                            height: 60,
+                            child: Center(
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          );
+                        }
 
-            // Delivery Address
-            Text(
-              "To: ${widget.deliveryAddress ?? "Unknown Address"}",
-              style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 20),
+                        if (!snapshot.hasData ||
+                            snapshot.data == null ||
+                            !snapshot.data!.exists) {
+                          return Image.asset(
+                            'assets/images/EngineOils.jpg',
+                            width: 60,
+                            height: 60,
+                            fit: BoxFit.cover,
+                          );
+                        }
 
-            // Delivery Items Table
-            if (deliveryItems.isNotEmpty)
-              Table(
-                border: TableBorder.all(color: Colors.grey.shade300),
-                columnWidths: const {
-                  0: FlexColumnWidth(2),
-                  1: FlexColumnWidth(1),
-                  2: FlexColumnWidth(2),
-                  3: FlexColumnWidth(2),
-                  4: FlexColumnWidth(1.5),
-                },
-                children: [
-                  const TableRow(
+                        final data =
+                        snapshot.data!.data() as Map<String, dynamic>;
+                        final imageUrl = data['imageUrl'] ?? '';
+
+                        return imageUrl.isNotEmpty
+                            ? Image.network(
+                          imageUrl,
+                          width: 60,
+                          height: 60,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => Image.asset(
+                            'assets/images/EngineOils.jpg',
+                            width: 60,
+                            height: 60,
+                            fit: BoxFit.cover,
+                          ),
+                        )
+                            : Image.asset(
+                          'assets/images/EngineOils.jpg',
+                          width: 60,
+                          height: 60,
+                          fit: BoxFit.cover,
+                        );
+                      },
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Padding(padding: EdgeInsets.all(8), child: Text('Item(s) Delivered', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold))),
-                      Padding(padding: EdgeInsets.all(8), child: Text('Quantity', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold))),
-                      Padding(padding: EdgeInsets.all(8), child: Text('Tracking Number', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold))),
-                      Padding(padding: EdgeInsets.all(8), child: Text('Delivery Date', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold))),
-                      Padding(padding: EdgeInsets.all(8), child: Text('Delivery Time', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold))),
+                      const SizedBox(height: 14),
+                      Row(
+                        children: [
+                          Text(
+                            '# $code', // Display document ID as code
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14.5,
+                            ),
+                          ),
+                          const Spacer(),
+                          if (status == 'On-Going' || status == 'Delivered')
+                            Transform.translate(
+                              offset: const Offset(0, -14.5),
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                alignment: Alignment.centerRight,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 3,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: status == 'Delivered'
+                                        ? Colors.green.shade100
+                                        : Colors.blue.shade100,
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: Text(
+                                    status,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: status == 'Delivered'
+                                          ? Colors.green
+                                          : Colors.blueGrey,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          const Icon(Icons.calendar_today, size: 16),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              date,
+                              style: const TextStyle(fontSize: 12),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          const Icon(Icons.access_time, size: 16),
+                          const SizedBox(width: 6),
+                          Text(time, style: const TextStyle(fontSize: 12)),
+                        ],
+                      ),
                     ],
                   ),
-                  ...deliveryItems.map((item) => TableRow(
-                    children: [
-                      Padding(padding: const EdgeInsets.all(8), child: Text(item.item, style: const TextStyle(fontSize: 10.5))),
-                      Padding(padding: const EdgeInsets.all(8), child: Text(item.qty.toString(), style: const TextStyle(fontSize: 10.5))),
-                      Padding(padding: const EdgeInsets.all(8), child: Text(item.tracking, style: const TextStyle(fontSize: 10.5))),
-                      Padding(padding: const EdgeInsets.all(8), child: Text(item.date, style: const TextStyle(fontSize: 10.5))),
-                      Padding(padding: const EdgeInsets.all(8), child: Text(item.time, style: const TextStyle(fontSize: 10.5))),
-                    ],
-                  )),
-                ],
-              ),
-            const SizedBox(height: 20,)
+                ),
+              ],
+            ),
+            const SizedBox(height: 5),
+            Divider(color: Colors.grey.shade300, thickness: 1),
+            const SizedBox(height: 8),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.location_on, size: 18),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(address, style: const TextStyle(fontSize: 11.5)),
+                ),
+              ],
+            ),
           ],
+        ),
+      ),
+    ),
+  );
+}
+
+class DeliveryDetailsPopUp extends StatelessWidget {
+  final String code;
+  final String address;
+  final String status;
+  final List<Map<String, dynamic>> items;
+  final LatLng? location;
+  final String employeeID; // Add employeeID
+
+  const DeliveryDetailsPopUp({
+    super.key,
+    required this.code,
+    required this.address,
+    required this.status,
+    required this.items,
+    this.location,
+    required this.employeeID, // Require employeeID
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final width = MediaQuery.of(context).size.width;
+    final height = MediaQuery.of(context).size.height;
+
+    return Material(
+      type: MaterialType.transparency,
+      child: Center(
+        child: Container(
+          width: width * 0.9,
+          constraints: BoxConstraints(
+            maxHeight: height * 0.8,
+          ),
+          padding: EdgeInsets.all(width * 0.05),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Column(
+            children: [
+              // Scrollable content
+              Expanded(
+                child: SingleChildScrollView(
+                  physics: const BouncingScrollPhysics(),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Delivery code
+                      Text(
+                        '# $code',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: width * 0.045,
+                        ),
+                      ),
+                      SizedBox(height: height * 0.015),
+
+                      // Employee ID
+                      Text(
+                        'Employee: $employeeID',
+                        style: TextStyle(
+                          fontSize: width * 0.035,
+                          color: Colors.grey,
+                        ),
+                      ),
+                      SizedBox(height: height * 0.01),
+
+                      // Map
+                      Container(
+                        height: height * 0.25,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.grey.shade300),
+                        ),
+                        child: GoogleMap(
+                          mapType: MapType.normal,
+                          initialCameraPosition: CameraPosition(
+                            target: location ?? LatLng(5.40688, 100.30968),
+                            zoom: 15,
+                          ),
+                          markers: {
+                            Marker(
+                              markerId: MarkerId(code),
+                              position: location ?? LatLng(5.40688, 100.30968),
+                              infoWindow: InfoWindow(title: 'Delivery Location'),
+                            ),
+                          },
+                          myLocationEnabled: false,
+                          zoomControlsEnabled: false,
+                        ),
+                      ),
+                      SizedBox(height: height * 0.015),
+
+                      // Address
+                      Row(
+                        children: [
+                          const Icon(Icons.location_pin),
+                          SizedBox(width: width * 0.02),
+                          Expanded(child: Text(address)),
+                        ],
+                      ),
+                      SizedBox(height: height * 0.02),
+
+                      // Goods Detail
+                      Text(
+                        'Goods Detail',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: width * 0.04,
+                        ),
+                      ),
+                      SizedBox(height: height * 0.01),
+
+                      // Items horizontally
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: items.map((item) {
+                            return FutureBuilder<DocumentSnapshot>(
+                              future: FirebaseFirestore.instance
+                                  .collection('items')
+                                  .doc(item['itemID'])
+                                  .get(),
+                              builder: (context, snapshot) {
+                                if (!snapshot.hasData) return const SizedBox();
+                                final data =
+                                snapshot.data!.data() as Map<String, dynamic>?;
+                                final imageUrl = data?['imageUrl'] ?? '';
+                                return Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 6, vertical: 6),
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      border: Border.all(
+                                          color: Colors.grey.shade100, width: 1.5),
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(6),
+                                      child: imageUrl.isNotEmpty
+                                          ? Image.network(
+                                        imageUrl,
+                                        width: 50,
+                                        height: 50,
+                                        fit: BoxFit.cover,
+                                      )
+                                          : Image.asset(
+                                        'assets/images/EngineOils.jpg',
+                                        width: 50,
+                                        height: 50,
+                                        fit: BoxFit.cover,
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              },
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                      SizedBox(height: height * 0.02),
+
+                      // Items vertical detail
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: items.map((item) {
+                          return FutureBuilder<DocumentSnapshot>(
+                            future: FirebaseFirestore.instance
+                                .collection('items')
+                                .doc(item['itemID'])
+                                .get(),
+                            builder: (context, snapshot) {
+                              if (!snapshot.hasData) return const SizedBox();
+                              final data =
+                              snapshot.data!.data() as Map<String, dynamic>?;
+                              final name = data?['itemName'] ?? 'Unknown';
+                              final price = (data?['price'] ?? 0).toDouble();
+                              final qty = item['quantity'] ?? 0;
+                              return Text(
+                                '• $name | RM ${price.toStringAsFixed(2)} x $qty',
+                                style: const TextStyle(color: Colors.grey),
+                              );
+                            },
+                          );
+                        }).toList(),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              SizedBox(height: height * 0.02),
+
+              // Fixed button
+              Builder(
+                builder: (_) {
+                  if (status == 'New Order') {
+                    return Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        ElevatedButton(
+                          onPressed: () => Navigator.of(context).pop(),
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                              vertical: 5,
+                              horizontal: 38,
+                            ),
+                            backgroundColor: Colors.grey.shade200,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(7),
+                            ),
+                          ),
+                          child: const Text(
+                            'Cancel',
+                            style: TextStyle(
+                              color: Colors.grey,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        ElevatedButton(
+                          onPressed: () {
+                            FirebaseFirestore.instance
+                                .collection('delivery')
+                                .doc(code) // Use code (document ID)
+                                .update({'status': 'On-Going'});
+                            Navigator.of(context).pop();
+                          },
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                              vertical: 5,
+                              horizontal: 30,
+                            ),
+                            backgroundColor: const Color(0xFF1B6C07),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(7),
+                            ),
+                          ),
+                          child: const Text(
+                            'Accepted',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ],
+                    );
+                  } else if (status == 'On-Going') {
+                    return ElevatedButton(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => GoogleMapPage(
+                              deliveryCode: code, // Pass document ID as code
+                              deliveryAddress: address,
+                              deliveryLocation: location,
+                              deliveryStatus: status,
+                              deliveryItems: items,
+                              // Removed employeeID parameter since GoogleMapPage doesn't need it
+                            ),
+                          ),
+                        );
+                      },
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 5,
+                          horizontal: 10,
+                        ),
+                        backgroundColor: const Color(0xFF1B6C07),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(7),
+                        ),
+                      ),
+                      child: const Text(
+                        'Start Navigation',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    );
+                  } else {
+                    return ElevatedButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 5,
+                          horizontal: 30,
+                        ),
+                        backgroundColor: const Color(0xFF1B6C07),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(7),
+                        ),
+                      ),
+                      child: const Text(
+                        'Back',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    );
+                  }
+                },
+              ),
+            ],
+          ),
         ),
       ),
     );
