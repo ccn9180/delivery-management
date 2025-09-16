@@ -75,7 +75,7 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
   bool _isFollowMode = true; // camera follows heading like turn-by-turn
   bool _userInteracting = false;
   BitmapDescriptor? _navArrowIcon;
-
+  
   // Enhanced navigation state management
   bool _hasReachedDestination = false;
   bool _isExternalNavigationActive = false;
@@ -102,7 +102,7 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initializeLocationAndMap();
     });
-
+    
     // Listen for app lifecycle changes to detect return from external navigation
     _lifecycleObserver = _AppLifecycleObserver(
       onResume: () {
@@ -275,11 +275,11 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
     if (_destination == null) return;
     final LatLng dest = _destination!;
     final LatLng origin = _currentPosition ?? dest;
-
+    
     // Create deep link URL for Google Maps navigation
     final Uri uri = Uri.parse(
         'https://www.google.com/maps/dir/?api=1&origin=${origin.latitude},${origin.longitude}&destination=${dest.latitude},${dest.longitude}&travelmode=driving&dir_action=navigate');
-
+    
     if (await canLaunchUrl(uri)) {
       setState(() {
         _isExternalNavigationActive = true;
@@ -318,7 +318,7 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
     if (mounted && _mapController != null && _currentPosition != null) {
       // Check if driver has reached destination
       _checkDestinationArrival();
-
+      
       setState(() {
         _markers.removeWhere((marker) => marker.markerId.value == "origin");
         _markers.add(
@@ -457,17 +457,18 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
   // Check if driver has reached the destination
   void _checkDestinationArrival() {
     if (_currentPosition == null || _destination == null || _hasReachedDestination) return;
-
+    
     double distanceToDestination = _distanceMeters(_currentPosition!, _destination!);
-
+    
     if (distanceToDestination <= _arrivalThreshold) {
       setState(() {
         _hasReachedDestination = true;
         _isNavigating = false;
-        _polylines.clear();
-        _isExternalNavigationActive = false;
-        _showDeliveryInfoCard = true; // keep app visible
+        _showDeliveryInfoCard = false; // Hide delivery info card when arrived
       });
+      
+      // Show arrival confirmation
+      _showArrivalConfirmation();
     }
   }
 
@@ -537,15 +538,7 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
         return AlertDialog(
           title: Row(
             children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(6),
-                child: Image.asset(
-                  'assets/images/logo.png',
-                  width: 22,
-                  height: 22,
-                  fit: BoxFit.cover,
-                ),
-              ),
+              const Icon(Icons.map, color: Colors.blue),
               const SizedBox(width: 8),
               const Expanded(
                 child: Text(
@@ -563,7 +556,7 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
             TextButton(
               onPressed: () {
                 Navigator.of(context).pop();
-                // Stop navigation and hide route (stay on this page)
+                // Stop navigation and hide route
                 setState(() {
                   _isExternalNavigationActive = false;
                   _isNavigating = false;
@@ -1338,15 +1331,7 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
                   tooltip: 'Open in Google Maps',
                   onPressed: _openExternalGoogleMaps,
                   backgroundColor: Colors.white,
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(28),
-                    child: Image.asset(
-                      'assets/images/logo.png',
-                      width: 28,
-                      height: 28,
-                      fit: BoxFit.cover,
-                    ),
-                  ),
+                  child: const Icon(Icons.map, color: Colors.blue),
                 ),
               ],
             ),
@@ -1439,163 +1424,162 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
         // Draggable delivery info sheet: pull up/down like a drawer
         if (_showDeliveryInfoCard)
           DraggableScrollableSheet(
-            initialChildSize: 0.12, // collapsed height (shorter)
-            minChildSize: 0.08,
-            maxChildSize: 0.40,
+            initialChildSize: 0.15, // collapsed height
+            minChildSize: 0.10,
+            maxChildSize: 0.50,
             snap: true,
-            snapSizes: const [0.14, 0.40],
+            snapSizes: const [0.16, 0.50],
             builder: (context, scrollController) {
-              return Container(
-                decoration: const BoxDecoration(
-                  color: Color(0xFF1B6C07),
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-                ),
-                padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-                child: SingleChildScrollView(
-                  controller: scrollController,
-                  physics: const BouncingScrollPhysics(),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      // Grip
-                      Container(
-                        width: 36,
-                        height: 4,
-                        margin: const EdgeInsets.only(bottom: 10),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.6),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
+            return Container(
+              decoration: const BoxDecoration(
+                color: Color(0xFF1B6C07),
+                borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+              ),
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+              child: SingleChildScrollView(
+                controller: scrollController,
+                physics: const BouncingScrollPhysics(),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Grip
+                    Container(
+                      width: 36,
+                      height: 4,
+                      margin: const EdgeInsets.only(bottom: 10),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.6),
+                        borderRadius: BorderRadius.circular(4),
                       ),
-                      Text(
-                        widget.deliveryCode ?? "# MSN 10011",
-                        style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold),
-                      ),
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          const Icon(Icons.location_on, color: Colors.white),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              widget.deliveryAddress ?? "22 & 24, Jln Sultan Ahmad Shah, George Town, Pulau Pinang",
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(color: Colors.white, fontSize: 13),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          const Icon(Icons.timer, color: Colors.white),
-                          const SizedBox(width: 8),
-                          Text(
-                            _getEstimatedDeliveryTime(),
+                    ),
+                    Text(
+                      widget.deliveryCode ?? "# MSN 10011",
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        const Icon(Icons.location_on, color: Colors.white),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            widget.deliveryAddress ?? "22 & 24, Jln Sultan Ahmad Shah, George Town, Pulau Pinang",
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
                             style: const TextStyle(color: Colors.white, fontSize: 13),
                           ),
-                        ],
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        const Icon(Icons.timer, color: Colors.white),
+                        const SizedBox(width: 8),
+                        Text(
+                          _getEstimatedDeliveryTime(),
+                          style: const TextStyle(color: Colors.white, fontSize: 13),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    if (_isNavigating && !_hasReachedDestination) ...[
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.navigation, color: Colors.white),
+                            SizedBox(width: 8),
+                            Text(
+                              "Navigation Active",
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                      const SizedBox(height: 6),
-                      if (_isNavigating && !_hasReachedDestination) ...[
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.2),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: const Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.navigation, color: Colors.white),
-                              SizedBox(width: 8),
-                              Text(
-                                "Navigation Active",
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                      ],
-                      if (_hasReachedDestination) ...[
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                          decoration: BoxDecoration(
-                            color: Colors.green.withOpacity(0.3),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: const Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.location_on, color: Colors.white),
-                              SizedBox(width: 8),
-                              Text(
-                                "Destination Reached!",
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                      ],
-                      if (_isExternalNavigationActive) ...[
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                          decoration: BoxDecoration(
-                            color: Colors.blue.withOpacity(0.3),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: const Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.map, color: Colors.white),
-                              SizedBox(width: 8),
-                              Text(
-                                "External Navigation Active",
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                      ],
-                      ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.white,
-                            minimumSize: const Size.fromHeight(36),
-                            foregroundColor: Colors.green),
-                        onPressed: () {
-                          // Replace Google Map with Confirmation page so back goes to delivery list
-                          Navigator.pushReplacement(
-                            context,
-                            MaterialPageRoute(builder: (context) => const ConfirmationPage()),
-                          );
-                        },
-                        child: const Text("Update"),
-                      )
+                      const SizedBox(height: 10),
                     ],
-                  ),
+                    if (_hasReachedDestination) ...[
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: Colors.green.withOpacity(0.3),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.location_on, color: Colors.white),
+                            SizedBox(width: 8),
+                            Text(
+                              "Destination Reached!",
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                    ],
+                    if (_isExternalNavigationActive) ...[
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.withOpacity(0.3),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.map, color: Colors.white),
+                            SizedBox(width: 8),
+                            Text(
+                              "External Navigation Active",
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                    ],
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.white,
+                          minimumSize: const Size.fromHeight(36),
+                          foregroundColor: Colors.green),
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => const ConfirmationPage()),
+                        );
+                      },
+                      child: const Text("Update"),
+                    )
+                  ],
                 ),
-              );
-            },
-          ),
+              ),
+            );
+          },
+        ),
       ],
     );
   }
