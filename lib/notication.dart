@@ -29,7 +29,7 @@ class NotificationsPage extends StatelessWidget {
       return;
     }
 
-    // Fetch notifications that should be visible now
+    // Fetch notifications
     yield* FirebaseFirestore.instance
         .collection("notifications")
         .where("employeeID", isEqualTo: employeeId)

@@ -5,21 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'homepage.dart'; // deliveryCard widget
 
-Stream<List<Delivery>> fetchAllDeliveries() async* {
-  final employeeCode = await fetchEmployeeCode();
-  if (employeeCode == null) {
-    yield [];
-    return;
-  }
-
-  yield* FirebaseFirestore.instance
-      .collection('delivery')
-      .where('employeeID', isEqualTo: employeeCode)
-      .snapshots()
-      .map((snapshot) =>
-      snapshot.docs.map((doc) => Delivery.fromDoc(doc)).toList());
-}
-
 class DeliveryHistory extends StatefulWidget {
   const DeliveryHistory({super.key});
 
@@ -29,12 +14,38 @@ class DeliveryHistory extends StatefulWidget {
 
 class _DeliveryHistoryState extends State<DeliveryHistory> {
   String _searchQuery = "";
+  DateTime? _pickedDate;
   final _searchCtrl = TextEditingController();
 
   @override
   void dispose() {
     _searchCtrl.dispose();
     super.dispose();
+  }
+
+  Stream<List<Delivery>> _fetchDeliveries() async* {
+    final employeeCode = await fetchEmployeeCode();
+    if (employeeCode == null) {
+      yield [];
+      return;
+    }
+
+    var query = FirebaseFirestore.instance
+        .collection('delivery')
+        .where('employeeID', isEqualTo: employeeCode)
+        .where('status', isEqualTo: 'Delivered')
+        .orderBy('deliveryDate', descending: true);
+
+    if (_pickedDate != null) {
+      final startOfDay = DateTime(_pickedDate!.year, _pickedDate!.month, _pickedDate!.day).toUtc();
+      final endOfDay = DateTime(_pickedDate!.year, _pickedDate!.month, _pickedDate!.day, 23, 59, 59).toUtc();
+      query = query
+          .where('deliveryDate', isGreaterThanOrEqualTo: startOfDay)
+          .where('deliveryDate', isLessThanOrEqualTo: endOfDay);
+    }
+
+    yield* query.snapshots().map(
+            (snapshot) => snapshot.docs.map((doc) => Delivery.fromDoc(doc)).toList());
   }
 
   @override
@@ -49,164 +60,109 @@ class _DeliveryHistoryState extends State<DeliveryHistory> {
           children: [
             const PageHeader(title: "Delivery History"),
             const SizedBox(height: 10),
-            Expanded(
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                decoration: const BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.only(
-                    topLeft: Radius.circular(20),
-                    topRight: Radius.circular(20),
+
+            // Search & date picker
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: TextField(
+                controller: _searchCtrl,
+                decoration: InputDecoration(
+                  hintText: "Search by Delivery ID or Date",
+                  prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                  suffixIcon: IconButton(
+                    icon: const Icon(Icons.calendar_today, color: Colors.grey),
+                    onPressed: () async {
+                      final picked = await showDatePicker(
+                        context: context,
+                        initialDate: DateTime.now(),
+                        firstDate: DateTime(2000),
+                        lastDate: DateTime(2100),
+                      );
+                      if (picked != null) {
+                        setState(() {
+                          _pickedDate = picked;
+                          _searchQuery = "";
+                          _searchCtrl.text = DateFormat('dd/MM/yyyy').format(picked);
+                        });
+                      }
+                    },
                   ),
+                  filled: true,
+                  fillColor: Colors.grey[100],
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
                 ),
-                child: Column(
-                  children: [
-                    // Search bar
-                    SizedBox(
-                      width: width,
-                      child: TextField(
-                        controller: _searchCtrl,
-                        decoration: InputDecoration(
-                          hintText: "Search by Delivery ID or Date",
-                          prefixIcon: const Icon(Icons.search, color: Colors.grey),
-                          suffixIcon: IconButton(
-                            icon: const Icon(Icons.calendar_today, color: Colors.grey),
-                            onPressed: () async {
-                              final pickedDate = await showDatePicker(
-                                context: context,
-                                initialDate: DateTime.now(),
-                                firstDate: DateTime(2000),
-                                lastDate: DateTime(2100),
-                              );
-                              if (pickedDate != null) {
-                                final formattedDate =
-                                DateFormat('dd/MM/yyyy').format(pickedDate);
-                                setState(() {
-                                  _searchQuery = formattedDate.toLowerCase();
-                                  _searchCtrl.text = formattedDate;
-                                });
-                              }
-                            },
-                          ),
-                          filled: true,
-                          fillColor: Colors.grey[100],
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide.none,
-                          ),
+                onChanged: (value) {
+                  setState(() {
+                    _searchQuery = value.trim().toLowerCase();
+                    _pickedDate = null; // reset date filter if typing
+                  });
+                },
+              ),
+            ),
+
+            const SizedBox(height: 12),
+
+            // Delivery list
+            Expanded(
+              child: StreamBuilder<List<Delivery>>(
+                stream: _fetchDeliveries(),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  final deliveries = snapshot.data ?? [];
+
+                  // Apply search filter if text is entered
+                  final filtered = _searchQuery.isNotEmpty
+                      ? deliveries.where((d) =>
+                  d.code.toLowerCase().contains(_searchQuery) ||
+                      DateFormat('dd/MM/yyyy').format(d.date).toLowerCase().contains(_searchQuery)
+                  ).toList()
+                      : deliveries;
+
+                  if (filtered.isEmpty) {
+                    return _emptyState();
+                  }
+
+                  final isWide = width > 600;
+                  return isWide
+                      ? GridView.builder(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 2,
+                      mainAxisSpacing: 16,
+                      crossAxisSpacing: 16,
+                      childAspectRatio: 3.5,
+                    ),
+                    itemCount: filtered.length,
+                    itemBuilder: (context, index) {
+                      final d = filtered[index];
+                      return deliveryCard(
+                        context: context,
+                        delivery: d,
+                        date: DateFormat('dd/MM/yyyy').format(d.date),
+                        time: DateFormat('hh:mm a').format(d.date),
+                      );
+                    },
+                  )
+                      : ListView.builder(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: filtered.length,
+                    itemBuilder: (context, index) {
+                      final d = filtered[index];
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 16),
+                        child: deliveryCard(
+                          context: context,
+                          delivery: d,
+                          date: DateFormat('dd/MM/yyyy').format(d.date),
+                          time: DateFormat('hh:mm a').format(d.date),
                         ),
-                        onChanged: (value) {
-                          setState(() {
-                            _searchQuery = value.trim().toLowerCase();
-                          });
-                        },
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-
-                    // List of deliveries
-                    Expanded(
-                      child: StreamBuilder<List<Delivery>>(
-                        stream: fetchAllDeliveries(),
-                        builder: (context, snapshot) {
-                          if (snapshot.connectionState == ConnectionState.waiting) {
-                            return const Center(child: CircularProgressIndicator());
-                          }
-
-                          if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                            return _emptyState();
-                          }
-
-                          final delivered = snapshot.data!
-                              .where((d) => d.status == 'Delivered')
-                              .toList();
-
-                          if (delivered.isEmpty) return _emptyState();
-
-                          final dateFormat = DateFormat('dd/MM/yyyy');
-                          final timeFormat = DateFormat('hh:mm a');
-
-                          List<Map<String, String>> mappedDeliveries = delivered.map(
-                                (d) => {
-                              'code': d.code,
-                              'address': d.address,
-                              'date': dateFormat.format(d.date),
-                              'time': timeFormat.format(d.date),
-                              'status': d.status,
-                              'image': d.items.isNotEmpty
-                                  ? (d.items.first['imageUrl']?.toString() ??
-                                  'assets/images/EngineOils.jpg')
-                                  : 'assets/images/EngineOils.jpg',
-                            },
-                          ).toList();
-
-                          if (_searchQuery.isNotEmpty) {
-                            mappedDeliveries = mappedDeliveries.where((d) {
-                              return d['code']!.toLowerCase().contains(_searchQuery) ||
-                                  d['date']!.toLowerCase().contains(_searchQuery);
-                            }).toList();
-                          }
-
-                          if (mappedDeliveries.isEmpty) {
-                            return Center(
-                              child: Text(
-                                "No matching deliveries found",
-                                style: TextStyle(
-                                    fontSize: 16, color: Colors.grey.shade600),
-                              ),
-                            );
-                          }
-
-                          // Use GridView on wide screens
-                          final isWide = width > 600;
-
-                          return isWide
-                              ? GridView.builder(
-                            gridDelegate:
-                            const SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount: 2,
-                              mainAxisSpacing: 16,
-                              crossAxisSpacing: 16,
-                              childAspectRatio: 3.5,
-                            ),
-                            itemCount: mappedDeliveries.length,
-                            itemBuilder: (context, index) {
-                              final d = mappedDeliveries[index];
-                              return deliveryCard(
-                                context: context,
-                                image: d['image']!,
-                                status: d['status']!,
-                                code: d['code']!,
-                                date: d['date']!,
-                                time: d['time']!,
-                                address: d['address']!,
-                              );
-                            },
-                          )
-                              : ListView.builder(
-                            padding: EdgeInsets.zero,
-                            itemCount: mappedDeliveries.length,
-                            itemBuilder: (context, index) {
-                              final d = mappedDeliveries[index];
-                              return Padding(
-                                padding: const EdgeInsets.only(bottom: 16),
-                                child: deliveryCard(
-                                  context: context,
-                                  image: d['image']!,
-                                  status: d['status']!,
-                                  code: d['code']!,
-                                  date: d['date']!,
-                                  time: d['time']!,
-                                  address: d['address']!,
-                                ),
-                              );
-                            },
-                          );
-                        },
-                      ),
-                    ),
-                  ],
-                ),
+                      );
+                    },
+                  );
+                },
               ),
             ),
           ],
