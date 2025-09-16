@@ -1580,7 +1580,8 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
                             minimumSize: const Size.fromHeight(36),
                             foregroundColor: Colors.green),
                         onPressed: () {
-                          Navigator.push(
+                          // Replace Google Map with Confirmation page so back goes to delivery list
+                          Navigator.pushReplacement(
                             context,
                             MaterialPageRoute(
                                 builder: (context) => const ConfirmationPage()),
@@ -1590,29 +1591,6 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
                             fontSize: 14, fontWeight: FontWeight.bold)),
                       )
                     ],
-
-                    // Replace this code in the Update button onPressed:
-                    ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.white,
-                        minimumSize: const Size.fromHeight(36),
-                        foregroundColor: Colors.green,
-                      ),
-                      onPressed: () {
-                        // Navigate to ConfirmationPage and remove GoogleMapPage from stack
-                        Navigator.pushAndRemoveUntil(
-                          context,
-                          MaterialPageRoute(builder: (context) => ConfirmationPage(
-                            deliveryCode: widget.deliveryCode, // Pass the delivery code
-                            deliveryAddress: widget.deliveryAddress,
-                            deliveryItems: widget.deliveryItems,
-                          )),
-                              (route) => route.isFirst, // Keep only the first route (HomePage)
-                        );
-                      },
-                      child: const Text("Update"),
-                    )
-                  ],
                   ),
                 ),
               );
