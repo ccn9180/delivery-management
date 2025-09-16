@@ -464,9 +464,7 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
       setState(() {
         _hasReachedDestination = true;
         _isNavigating = false;
-        _polylines.clear();
-        _isExternalNavigationActive = false;
-        _showDeliveryInfoCard = true; // keep app visible
+        _showDeliveryInfoCard = false; // Hide delivery info card when arrived
       });
 
       // Show arrival confirmation
@@ -543,7 +541,7 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
               ClipRRect(
                 borderRadius: BorderRadius.circular(6),
                 child: Image.asset(
-                  'assets/images/logo.png',
+                  'assets/images/SWPS.png',
                   width: 22,
                   height: 22,
                   fit: BoxFit.cover,
@@ -566,7 +564,7 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
             TextButton(
               onPressed: () {
                 Navigator.of(context).pop();
-                // Stop navigation and hide route (stay on this page)
+                // Stop navigation and hide route
                 setState(() {
                   _isExternalNavigationActive = false;
                   _isNavigating = false;
@@ -1249,7 +1247,8 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
           indoorViewEnabled: true,
           tiltGesturesEnabled: true,
           rotateGesturesEnabled: true,
-          padding: const EdgeInsets.only(top: 80, bottom: 170, left: 6, right: 6),
+          padding: const EdgeInsets.only(
+              top: 80, bottom: 170, left: 6, right: 6),
           onCameraMoveStarted: () {
             _userInteracting = true;
             if (_isFollowMode) {
@@ -1266,7 +1265,8 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
               markerId: const MarkerId("current_user"),
               position: _currentPosition!,
               infoWindow: const InfoWindow(title: "You are here"),
-              icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
+              icon: BitmapDescriptor.defaultMarkerWithHue(
+                  BitmapDescriptor.hueAzure),
             )
           },
           polylines: _polylines,
@@ -1341,7 +1341,15 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
                   tooltip: 'Open in Google Maps',
                   onPressed: _openExternalGoogleMaps,
                   backgroundColor: Colors.white,
-                  child: const Icon(Icons.map, color: Colors.blue),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(28),
+                    child: Image.asset(
+                      'assets/images/SWPS.png',
+                      width: 28,
+                      height: 28,
+                      fit: BoxFit.cover,
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -1410,7 +1418,8 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
                 children: [
                   Transform.rotate(
                     angle: _currentBearing * (pi / 180),
-                    child: const Icon(Icons.turn_slight_right, color: Colors.blue, size: 26),
+                    child: const Icon(
+                        Icons.turn_slight_right, color: Colors.blue, size: 26),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
@@ -1418,7 +1427,8 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
                       _currentDirection,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                      style: const TextStyle(
+                          fontSize: 16, fontWeight: FontWeight.w600),
                     ),
                   ),
                   const SizedBox(width: 8),
