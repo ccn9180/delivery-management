@@ -538,7 +538,15 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
         return AlertDialog(
           title: Row(
             children: [
-              const Icon(Icons.map, color: Colors.blue),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: Image.asset(
+                  'assets/images/SWPS.png',
+                  width: 22,
+                  height: 22,
+                  fit: BoxFit.cover,
+                ),
+              ),
               const SizedBox(width: 8),
               const Expanded(
                 child: Text(
@@ -1333,7 +1341,15 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
                   tooltip: 'Open in Google Maps',
                   onPressed: _openExternalGoogleMaps,
                   backgroundColor: Colors.white,
-                  child: const Icon(Icons.map, color: Colors.blue),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(28),
+                    child: Image.asset(
+                      'assets/images/SWPS.png',
+                      width: 28,
+                      height: 28,
+                      fit: BoxFit.cover,
+                    ),
+                  ),
                 ),
               ],
             ),
