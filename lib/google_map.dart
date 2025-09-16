@@ -75,6 +75,13 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
   bool _isFollowMode = true; // camera follows heading like turn-by-turn
   bool _userInteracting = false;
   BitmapDescriptor? _navArrowIcon;
+  
+  // Enhanced navigation state management
+  bool _hasReachedDestination = false;
+  bool _isExternalNavigationActive = false;
+  bool _showDeliveryInfoCard = true;
+  double _arrivalThreshold = Config.arrivalThresholdMeters; // meters - consider arrived when within this distance
+  _AppLifecycleObserver? _lifecycleObserver;
 
   // Navigation direction variables
   String _currentDirection = "Head towards destination";
@@ -95,6 +102,17 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initializeLocationAndMap();
     });
+    
+    // Listen for app lifecycle changes to detect return from external navigation
+    _lifecycleObserver = _AppLifecycleObserver(
+      onResume: () {
+        if (_isExternalNavigationActive) {
+          // User returned from external Google Maps, show option to continue
+          _showReturnFromExternalNavigationDialog();
+        }
+      },
+    );
+    WidgetsBinding.instance.addObserver(_lifecycleObserver!);
   }
 
   Future<void> _initializeLocationAndMap() async {
@@ -256,9 +274,17 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
   Future<void> _openExternalGoogleMaps() async {
     if (_destination == null) return;
     final LatLng dest = _destination!;
+    final LatLng origin = _currentPosition ?? dest;
+    
+    // Create deep link URL for Google Maps navigation
     final Uri uri = Uri.parse(
-        'https://www.google.com/maps/dir/?api=1&destination=${dest.latitude},${dest.longitude}&travelmode=driving&dir_action=navigate');
+        'https://www.google.com/maps/dir/?api=1&origin=${origin.latitude},${origin.longitude}&destination=${dest.latitude},${dest.longitude}&travelmode=driving&dir_action=navigate');
+    
     if (await canLaunchUrl(uri)) {
+      setState(() {
+        _isExternalNavigationActive = true;
+        _showDeliveryInfoCard = false; // Hide delivery info when external navigation is active
+      });
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     }
   }
@@ -290,6 +316,9 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
 
   void _updateNavigation(Position position) {
     if (mounted && _mapController != null && _currentPosition != null) {
+      // Check if driver has reached destination
+      _checkDestinationArrival();
+      
       setState(() {
         _markers.removeWhere((marker) => marker.markerId.value == "origin");
         _markers.add(
@@ -419,7 +448,136 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
       _polylines.clear();
       _markers.clear();
       _destination = null;
+      _hasReachedDestination = false;
+      _isExternalNavigationActive = false;
+      _showDeliveryInfoCard = true;
     });
+  }
+
+  // Check if driver has reached the destination
+  void _checkDestinationArrival() {
+    if (_currentPosition == null || _destination == null || _hasReachedDestination) return;
+    
+    double distanceToDestination = _distanceMeters(_currentPosition!, _destination!);
+    
+    if (distanceToDestination <= _arrivalThreshold) {
+      setState(() {
+        _hasReachedDestination = true;
+        _isNavigating = false;
+        _showDeliveryInfoCard = false; // Hide delivery info card when arrived
+      });
+      
+      // Show arrival confirmation
+      _showArrivalConfirmation();
+    }
+  }
+
+  // Show arrival confirmation dialog
+  void _showArrivalConfirmation() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Row(
+            children: [
+              const Icon(Icons.location_on, color: Colors.green),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  'Destination Reached!',
+                  style: TextStyle(fontSize: 18),
+                ),
+              ),
+            ],
+          ),
+          content: const Text(
+            'You have arrived at the delivery destination. Please use the Update button below to proceed with the delivery.',
+            textAlign: TextAlign.center,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                // Keep navigation active for re-routing
+                setState(() {
+                  _hasReachedDestination = false;
+                  _isNavigating = true;
+                  _showDeliveryInfoCard = true;
+                });
+              },
+              child: const Text('Continue Navigation'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                // Just close the dialog, user can use Update button
+              },
+              child: const Text('OK'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // Return to internal navigation from external Google Maps
+  void _returnToInternalNavigation() {
+    setState(() {
+      _isExternalNavigationActive = false;
+      _showDeliveryInfoCard = true;
+      _isNavigating = true;
+    });
+  }
+
+  // Show dialog when user returns from external navigation
+  void _showReturnFromExternalNavigationDialog() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Row(
+            children: [
+              const Icon(Icons.map, color: Colors.blue),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  'Navigation Status',
+                  style: TextStyle(fontSize: 18),
+                ),
+              ),
+            ],
+          ),
+          content: const Text(
+            'You have returned from Google Maps. Would you like to continue with internal navigation?',
+            textAlign: TextAlign.left,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                // Stop navigation and hide route
+                setState(() {
+                  _isExternalNavigationActive = false;
+                  _isNavigating = false;
+                  _polylines.clear();
+                  _showDeliveryInfoCard = true;
+                });
+              },
+              child: const Text('Stop Navigation'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                // Continue with external Google Maps navigation
+                _openExternalGoogleMaps();
+              },
+              child: const Text('Continue Navigation'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   // Show route direction with real road-based navigation
@@ -1009,6 +1167,9 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
   void dispose() {
     _positionStream?.cancel();
     _mapController?.dispose();
+    if (_lifecycleObserver != null) {
+      WidgetsBinding.instance.removeObserver(_lifecycleObserver!);
+    }
     super.dispose();
   }
 
@@ -1160,7 +1321,7 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
             ),
           ),
         // Navigation control buttons (bottom right)
-        if (_isNavigating)
+        if (_isNavigating && !_hasReachedDestination)
           Positioned(
             bottom: 200,
             right: 16,
@@ -1173,6 +1334,23 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
                   child: const Icon(Icons.map, color: Colors.blue),
                 ),
               ],
+            ),
+          ),
+
+        // Return to internal navigation button (when external navigation is active)
+        if (_isExternalNavigationActive)
+          Positioned(
+            bottom: 200,
+            left: 16,
+            child: ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.white,
+                foregroundColor: Colors.black87,
+                elevation: 3,
+              ),
+              onPressed: _returnToInternalNavigation,
+              icon: const Icon(Icons.arrow_back),
+              label: const Text('Return to App'),
             ),
           ),
 
@@ -1244,13 +1422,14 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
           ),
 
         // Draggable delivery info sheet: pull up/down like a drawer
-        DraggableScrollableSheet(
-          initialChildSize: 0.15, // collapsed height
-          minChildSize: 0.10,
-          maxChildSize: 0.50,
-          snap: true,
-          snapSizes: const [0.16, 0.50],
-          builder: (context, scrollController) {
+        if (_showDeliveryInfoCard)
+          DraggableScrollableSheet(
+            initialChildSize: 0.15, // collapsed height
+            minChildSize: 0.10,
+            maxChildSize: 0.50,
+            snap: true,
+            snapSizes: const [0.16, 0.50],
+            builder: (context, scrollController) {
             return Container(
               decoration: const BoxDecoration(
                 color: Color(0xFF1B6C07),
@@ -1307,7 +1486,7 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
                       ],
                     ),
                     const SizedBox(height: 10),
-                    if (_isNavigating) ...[
+                    if (_isNavigating && !_hasReachedDestination) ...[
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                         decoration: BoxDecoration(
@@ -1321,6 +1500,56 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
                             SizedBox(width: 8),
                             Text(
                               "Navigation Active",
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                    ],
+                    if (_hasReachedDestination) ...[
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: Colors.green.withOpacity(0.3),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.location_on, color: Colors.white),
+                            SizedBox(width: 8),
+                            Text(
+                              "Destination Reached!",
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                    ],
+                    if (_isExternalNavigationActive) ...[
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.withOpacity(0.3),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.map, color: Colors.white),
+                            SizedBox(width: 8),
+                            Text(
+                              "External Navigation Active",
                               style: TextStyle(
                                 color: Colors.white,
                                 fontSize: 14,
@@ -1353,5 +1582,19 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
         ),
       ],
     );
+  }
+}
+
+// App lifecycle observer to detect when user returns from external navigation
+class _AppLifecycleObserver extends WidgetsBindingObserver {
+  final VoidCallback onResume;
+
+  _AppLifecycleObserver({required this.onResume});
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      onResume();
+    }
   }
 }

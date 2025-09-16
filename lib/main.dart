@@ -33,10 +33,6 @@ class Wrapper extends StatelessWidget {
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  if (Platform.isAndroid) {
-    AndroidGoogleMapsFlutter.useAndroidViewSurface = false;
-  }
   runApp(const MyApp());
 }
 
@@ -48,17 +44,15 @@ class MyApp extends StatelessWidget {
     return FutureBuilder(
       future: Firebase.apps.isEmpty
           ? Firebase.initializeApp(
-        options: DefaultFirebaseOptions.currentPlatform,
-      )
+              options: DefaultFirebaseOptions.currentPlatform,
+            )
           : Future.value(Firebase.app()),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.done) {
           return MaterialApp(
             debugShowCheckedModeBanner: false,
             title: 'SWPS',
-            theme: ThemeData(
-              primarySwatch: Colors.green,
-            ),
+            theme: ThemeData(primarySwatch: Colors.green),
             home: const Wrapper(),
           );
         }
@@ -74,9 +68,7 @@ class MyApp extends StatelessWidget {
         }
 
         return const MaterialApp(
-          home: Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          ),
+          home: Scaffold(body: Center(child: CircularProgressIndicator())),
         );
       },
     );
