@@ -35,20 +35,22 @@ class Delivery {
   }
 }
 
-//match the employee
+/// ----------------------- FIREBASE HELPERS -----------------------
+/// Cache for items to avoid re-reading the same doc
+final Map<String, Map<String, dynamic>> _itemCache = {};
+
 Future<String?> fetchEmployeeCode() async {
   final user = FirebaseAuth.instance.currentUser;
   if (user == null) return null;
 
   final userDoc = await FirebaseFirestore.instance
       .collection('users')
-      .doc(user.uid) // Firebase UID must match user doc ID
+      .doc(user.uid)
       .get();
 
   return userDoc.data()?['employeeID'];
 }
 
-//only fetch sysdate delivery
 Stream<List<Delivery>> fetchEmployeeDeliveries() async* {
   final employeeCode = await fetchEmployeeCode();
   if (employeeCode == null) {
@@ -56,7 +58,7 @@ Stream<List<Delivery>> fetchEmployeeDeliveries() async* {
     return;
   }
 
-  final now = DateTime.now(); // use local time
+  final now = DateTime.now();
   final startOfDayLocal = DateTime(now.year, now.month, now.day, 0, 0, 0);
   final endOfDayLocal = DateTime(now.year, now.month, now.day, 23, 59, 59);
 
@@ -69,12 +71,49 @@ Stream<List<Delivery>> fetchEmployeeDeliveries() async* {
       .where('deliveryDate', isGreaterThanOrEqualTo: startOfDay)
       .where('deliveryDate', isLessThanOrEqualTo: endOfDay)
       .snapshots()
-      .map((snapshot) =>
-      snapshot.docs.map((doc) => Delivery.fromDoc(doc)).toList()
+      .map(
+        (snapshot) =>
+        snapshot.docs.map((doc) => Delivery.fromDoc(doc)).toList(),
   );
-
 }
 
+/// Preload all items in the cache
+Future<void> preloadItems(List<Delivery> deliveries) async {
+  final ids = deliveries
+      .expand((d) => d.items.map((i) => i['itemID'] as String))
+      .toSet();
+  final missing = ids.where((id) => !_itemCache.containsKey(id)).toList();
+
+  if (missing.isNotEmpty) {
+    final snaps = await FirebaseFirestore.instance
+        .collection('items')
+        .where(
+      FieldPath.documentId,
+      whereIn: missing.take(10).toList(),
+    ) // Firestore allows max 10 in whereIn
+        .get();
+
+    for (var doc in snaps.docs) {
+      _itemCache[doc.id] = doc.data();
+    }
+
+    // If more than 10, fetch in batches
+    if (missing.length > 10) {
+      for (var i = 10; i < missing.length; i += 10) {
+        final batch = missing.skip(i).take(10).toList();
+        final extraSnaps = await FirebaseFirestore.instance
+            .collection('items')
+            .where(FieldPath.documentId, whereIn: batch)
+            .get();
+        for (var doc in extraSnaps.docs) {
+          _itemCache[doc.id] = doc.data();
+        }
+      }
+    }
+  }
+}
+
+//-----------------------HOME PAGE--------------------------------
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
   @override
@@ -88,26 +127,17 @@ class _HomePageStatus extends State<HomePage> {
   @override
   void initState() {
     super.initState();
-    FirebaseFirestore.instance.collection('delivery').get().then((snapshot) {
-      print("Total docs: ${snapshot.docs.length}");
-      for (var doc in snapshot.docs) {
-        print(doc.data());
-      }
-    });
     _pages = [
       const DeliveryHistory(),
       const DeliveryListPage(),
-      const ProfilePage()
+      const ProfilePage(),
     ];
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body:IndexedStack(
-        index: _selectedIndex,
-        children: _pages,
-      ),
+      body: IndexedStack(index: _selectedIndex, children: _pages),
       bottomNavigationBar: Theme(
         data: Theme.of(context).copyWith(
           splashColor: Colors.transparent,
@@ -138,10 +168,7 @@ class _HomePageStatus extends State<HomePage> {
               icon: Icon(Icons.home),
               label: 'Deliveries List',
             ),
-            BottomNavigationBarItem(
-                icon: Icon(Icons.person),
-                label: 'Profile'
-            ),
+            BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
           ],
         ),
       ),
@@ -149,6 +176,7 @@ class _HomePageStatus extends State<HomePage> {
   }
 }
 
+//---------------------------------DELIVERY LIST PAGE---------------------------------
 class DeliveryListPage extends StatelessWidget {
   const DeliveryListPage({super.key});
 
@@ -169,7 +197,9 @@ class DeliveryListPage extends StatelessWidget {
                   builder: (context, snapshot) {
                     final deliveries = snapshot.data ?? [];
                     final total = deliveries.length;
-                    final delivered = deliveries.where((d) => d.status == 'Delivered').length;
+                    final delivered = deliveries
+                        .where((d) => d.status == 'Delivered')
+                        .length;
                     final progress = total == 0 ? 0.0 : delivered / total;
 
                     return SizedBox(
@@ -178,20 +208,18 @@ class DeliveryListPage extends StatelessWidget {
                       child: Stack(
                         alignment: Alignment.center,
                         children: [
-                          SizedBox(
-                            width: 46,
-                            height: 46,
-                            child: CircularProgressIndicator(
-                              value: progress,
-                              strokeWidth: 6,
-                              backgroundColor: Colors.grey.shade200,
-                              valueColor: AlwaysStoppedAnimation<Color>(
-                                delivered == total && total != 0 ? Colors.green : Colors.orange,
-                              ),
+                          CircularProgressIndicator(
+                            value: progress,
+                            strokeWidth: 6,
+                            backgroundColor: Colors.grey.shade200,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              delivered == total && total != 0
+                                  ? Colors.green
+                                  : Colors.orange,
                             ),
                           ),
                           Text(
-                            "$delivered/$total", // <-- fraction instead of percentage
+                            "$delivered/$total",
                             style: const TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.bold,
@@ -230,12 +258,10 @@ class DeliveryListPage extends StatelessWidget {
                   stream: fetchEmployeeDeliveries(),
                   builder: (context, snapshot) {
                     if (snapshot.connectionState == ConnectionState.waiting) {
-                      return const Center(
-                        child: CircularProgressIndicator(),
-                      );
+                      return const Center(child: CircularProgressIndicator());
                     }
-
-                    final deliveries = snapshot.data ?? [];
+                    final deliveries = snapshot.data!;
+                    preloadItems(deliveries);
 
                     final newOrder = deliveries
                         .where((d) => d.status == 'New Order')
@@ -250,35 +276,19 @@ class DeliveryListPage extends StatelessWidget {
                     final dateFormat = DateFormat('dd/MM/yyyy');
                     final timeFormat = DateFormat('hh:mm a');
 
-                    List<Map<String, String>> mapList(List<Delivery> list) =>
-                        list
-                            .map(
-                              (d) => {
-                            'code': d.code,
-                            'address': d.address,
-                            'date': dateFormat.format(d.date),
-                            'time': timeFormat.format(d.date),
-                            'status': d.status,
-                            'image': d.items.isNotEmpty
-                                ? (d.items.first['imageUrl']?.toString() ??
-                                'assets/images/EngineOils.jpg')
-                                : 'assets/images/EngineOils.jpg',
-                          },
-                        ).toList();
-
                     return TabBarView(
                       children: [
                         DeliveryListTab(
-                          deliveries: mapList(newOrder),
-                          emptyMessages: "No new orders assigned today",
+                          deliveries: newOrder,
+                          emptyMessages: "No new orders",
                         ),
                         DeliveryListTab(
-                          deliveries: mapList(ongoing),
-                          emptyMessages: "No on-going deliveries at the moment",
+                          deliveries: ongoing,
+                          emptyMessages: "No ongoing deliveries",
                         ),
                         DeliveryListTab(
-                          deliveries: mapList(finished),
-                          emptyMessages: "No deliveries have been completed yet",
+                          deliveries: finished,
+                          emptyMessages: "No completed deliveries",
                         ),
                       ],
                     );
@@ -293,9 +303,9 @@ class DeliveryListPage extends StatelessWidget {
   }
 }
 
-
+//-------------------------------------TAB-----------------------------------------------
 class DeliveryListTab extends StatefulWidget {
-  final List<Map<String, String>> deliveries;
+  final List<Delivery> deliveries;
   final String emptyMessages;
 
   const DeliveryListTab({
@@ -328,20 +338,22 @@ class _DeliveryListTabState extends State<DeliveryListTab>
     }
 
     return ListView.builder(
-      padding: EdgeInsets.all(16),
+      padding: const EdgeInsets.all(16),
       itemCount: widget.deliveries.length,
       itemBuilder: (context, index) {
-        final d = widget.deliveries[index];
+        final delivery = widget.deliveries[index];
+
+        // Format date and time
+        final dateStr = DateFormat('dd/MM/yyyy').format(delivery.date);
+        final timeStr = DateFormat('hh:mm a').format(delivery.date);
+
         return Padding(
-          padding: EdgeInsets.fromLTRB(7, 0, 7, 16),
+          padding: const EdgeInsets.fromLTRB(7, 0, 7, 16),
           child: deliveryCard(
             context: context,
-            image: d['image']!,
-            status: d['status']!,
-            code: d['code']!,
-            date: d['date']!,
-            time: d['time']!,
-            address: d['address']!,
+            delivery: delivery, // pass full object
+            date: dateStr,
+            time: timeStr,
           ),
         );
       },
@@ -349,29 +361,21 @@ class _DeliveryListTabState extends State<DeliveryListTab>
   }
 }
 
-
+//--------------------------------DELIVERY CARD------------------------------------------
 Widget deliveryCard({
   required BuildContext context,
-  required String image,
-  required String code,
+  required Delivery delivery,
   required String date,
   required String time,
-  required String address,
-  required String status,
 }) {
+  final code = delivery.code;
+  final status = delivery.status;
+  final address = delivery.address;
+  final dateStr = DateFormat('dd/MM/yyyy').format(delivery.date);
+  final timeStr = DateFormat('hh:mm a').format(delivery.date);
+
   return GestureDetector(
-    onTap: () async {
-      final doc = await FirebaseFirestore.instance
-          .collection('delivery')
-          .doc(code)
-          .get();
-
-      if (!doc.exists) return;
-
-      final data = doc.data() as Map<String, dynamic>;
-      final List<Map<String, dynamic>> deliveryItems =
-      List<Map<String, dynamic>>.from(data['deliveryItems'] ?? []);
-
+    onTap: () {
       showGeneralDialog(
         context: context,
         barrierDismissible: true,
@@ -379,23 +383,7 @@ Widget deliveryCard({
         barrierColor: Colors.black.withOpacity(0.5),
         transitionDuration: const Duration(milliseconds: 300),
         pageBuilder: (context, anim1, anim2) {
-          final loc = data['location'] != null
-              ? LatLng(
-            (data['location'] as GeoPoint).latitude,
-            (data['location'] as GeoPoint).longitude,
-          )
-              : LatLng(5.40688, 100.30968);
-          print('Delivery $code location: ${data['location']}');
-
-          return Center(
-            child: DeliveryDetailsPopUp(
-              code: code,
-              address: address,
-              status: status,
-              items: deliveryItems,
-              location: loc,
-            ),
-          );
+          return Center(child: DeliveryDetailsPopUp(delivery: delivery));
         },
         transitionBuilder: (context, anim1, anim2, child) {
           return ScaleTransition(
@@ -405,7 +393,6 @@ Widget deliveryCard({
         },
       );
     },
-
     child: Card(
       color: Colors.white,
       shape: RoundedRectangleBorder(
@@ -419,10 +406,10 @@ Widget deliveryCard({
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const SizedBox(height: 5),
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Item image
                 Container(
                   padding: EdgeInsets.symmetric(horizontal: 6, vertical: 6),
                   decoration: BoxDecoration(
@@ -431,54 +418,20 @@ Widget deliveryCard({
                   ),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(8),
-                    child: FutureBuilder<DocumentSnapshot?>(
-                      future: FirebaseFirestore.instance
-                          .collection('delivery')
-                          .doc(code)
-                          .get()
-                          .then((doc) async {
-                        if (!doc.exists) return null;
-
-                        final data = doc.data() as Map<String, dynamic>;
-                        final items = List<Map<String, dynamic>>.from(
-                          data['deliveryItems'] ?? [],
-                        );
-
-                        if (items.isEmpty) return null;
-
-                        final firstItemId = items.first['itemID'];
-                        return FirebaseFirestore.instance
-                            .collection('items')
-                            .doc(firstItemId)
-                            .get();
-                      }),
-                      builder: (context, snapshot) {
-                        if (snapshot.connectionState ==
-                            ConnectionState.waiting) {
-                          return const SizedBox(
-                            width: 60,
-                            height: 60,
-                            child: Center(
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            ),
-                          );
-                        }
-
-                        // Handle null or non-existing doc
-                        if (!snapshot.hasData ||
-                            snapshot.data == null ||
-                            !snapshot.data!.exists) {
+                    child: Builder(
+                      builder: (_) {
+                        if (delivery.items.isEmpty) {
                           return Image.asset(
-                            'assets/images/EngineOils.jpg',
+                            'assets/images/noimage.png',
                             width: 60,
                             height: 60,
                             fit: BoxFit.cover,
                           );
                         }
 
-                        final data =
-                        snapshot.data!.data() as Map<String, dynamic>;
-                        final imageUrl = data['imageUrl'] ?? '';
+                        final firstItemId = delivery.items.first['itemID'];
+                        final cached = _itemCache[firstItemId];
+                        final imageUrl = cached?['imageUrl'] ?? '';
 
                         return imageUrl.isNotEmpty
                             ? Image.network(
@@ -486,15 +439,9 @@ Widget deliveryCard({
                           width: 60,
                           height: 60,
                           fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => Image.asset(
-                            'assets/images/EngineOils.jpg',
-                            width: 60,
-                            height: 60,
-                            fit: BoxFit.cover,
-                          ),
                         )
                             : Image.asset(
-                          'assets/images/EngineOils.jpg',
+                          'assets/images/noimage.png',
                           width: 60,
                           height: 60,
                           fit: BoxFit.cover,
@@ -503,7 +450,6 @@ Widget deliveryCard({
                     ),
                   ),
                 ),
-
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
@@ -514,7 +460,7 @@ Widget deliveryCard({
                         children: [
                           Text(
                             '# $code',
-                            style: TextStyle(
+                            style: const TextStyle(
                               fontWeight: FontWeight.bold,
                               fontSize: 14.5,
                             ),
@@ -523,29 +469,25 @@ Widget deliveryCard({
                           if (status == 'On-Going' || status == 'Delivered')
                             Transform.translate(
                               offset: const Offset(0, -14.5),
-                              child: FittedBox(
-                                fit: BoxFit.scaleDown,
-                                alignment: Alignment.centerRight,
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                    vertical: 3,
-                                  ),
-                                  decoration: BoxDecoration(
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 3,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: status == 'Delivered'
+                                      ? Colors.green.shade100
+                                      : Colors.blue.shade100,
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: Text(
+                                  status,
+                                  style: TextStyle(
+                                    fontSize: 12,
                                     color: status == 'Delivered'
-                                        ? Colors.green.shade100
-                                        : Colors.blue.shade100,
-                                    borderRadius: BorderRadius.circular(20),
-                                  ),
-                                  child: Text(
-                                    status,
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: status == 'Delivered'
-                                          ? Colors.green
-                                          : Colors.blueGrey,
-                                      fontWeight: FontWeight.bold,
-                                    ),
+                                        ? Colors.green
+                                        : Colors.blueGrey,
+                                    fontWeight: FontWeight.bold,
                                   ),
                                 ),
                               ),
@@ -557,18 +499,11 @@ Widget deliveryCard({
                         children: [
                           const Icon(Icons.calendar_today, size: 16),
                           const SizedBox(width: 6),
-                          Expanded(
-                            child: Text(
-                              date,
-                              style: const TextStyle(fontSize: 12),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
+                          Text(dateStr, style: const TextStyle(fontSize: 12)),
+                          const SizedBox(width: 12),
                           const Icon(Icons.access_time, size: 16),
                           const SizedBox(width: 6),
-                          Text(time, style: const TextStyle(fontSize: 12)),
+                          Text(timeStr, style: const TextStyle(fontSize: 12)),
                         ],
                       ),
                     ],
@@ -576,7 +511,7 @@ Widget deliveryCard({
                 ),
               ],
             ),
-            const SizedBox(height: 5),
+            const SizedBox(height: 8),
             Divider(color: Colors.grey.shade300, thickness: 1),
             const SizedBox(height: 8),
             Row(
@@ -596,35 +531,31 @@ Widget deliveryCard({
   );
 }
 
+//--------------------------------DELIVERY DETAILS POP UP-------------------------------------
 class DeliveryDetailsPopUp extends StatelessWidget {
-  final String code;
-  final String address;
-  final String status;
-  final List<Map<String, dynamic>> items;
-  final LatLng? location;
+  final Delivery delivery;
 
-  const DeliveryDetailsPopUp({
-    super.key,
-    required this.code,
-    required this.address,
-    required this.status,
-    required this.items,
-    this.location,
-  });
+  const DeliveryDetailsPopUp({super.key, required this.delivery});
 
   @override
   Widget build(BuildContext context) {
     final width = MediaQuery.of(context).size.width;
     final height = MediaQuery.of(context).size.height;
 
+    final location =
+    delivery.items.isNotEmpty && delivery.items.first['location'] != null
+        ? LatLng(
+      (delivery.items.first['location'] as GeoPoint).latitude,
+      (delivery.items.first['location'] as GeoPoint).longitude,
+    )
+        : LatLng(5.40688, 100.30968);
+
     return Material(
       type: MaterialType.transparency,
       child: Center(
         child: Container(
           width: width * 0.9,
-          constraints: BoxConstraints(
-            maxHeight: height * 0.8,
-          ),
+          constraints: BoxConstraints(maxHeight: height * 0.8),
           padding: EdgeInsets.all(width * 0.05),
           decoration: BoxDecoration(
             color: Colors.white,
@@ -632,26 +563,21 @@ class DeliveryDetailsPopUp extends StatelessWidget {
           ),
           child: Column(
             children: [
-              // Scrollable content
               Expanded(
                 child: SingleChildScrollView(
-                  physics: const BouncingScrollPhysics(),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Delivery code
                       Text(
-                        '# $code',
+                        '# ${delivery.code}',
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
-                          fontSize: width * 0.045, // scaled
+                          fontSize: width * 0.045,
                         ),
                       ),
-                      SizedBox(height: height * 0.015),
-
-                      // Map
+                      const SizedBox(height: 12),
                       Container(
-                        height: height * 0.25, // scaled height
+                        height: height * 0.25,
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(color: Colors.grey.shade300),
@@ -659,33 +585,32 @@ class DeliveryDetailsPopUp extends StatelessWidget {
                         child: GoogleMap(
                           mapType: MapType.normal,
                           initialCameraPosition: CameraPosition(
-                            target: location ?? LatLng(5.40688, 100.30968),
+                            target: location,
                             zoom: 15,
                           ),
                           markers: {
                             Marker(
-                              markerId: MarkerId(code),
-                              position: location ?? LatLng(5.40688, 100.30968),
-                              infoWindow: InfoWindow(title: 'Delivery Location'),
+                              markerId: MarkerId(delivery.code),
+                              position: location,
                             ),
                           },
-                          myLocationEnabled: false,
                           zoomControlsEnabled: false,
                         ),
                       ),
-                      SizedBox(height: height * 0.015),
-
-                      // Address
+                      const SizedBox(height: 12),
                       Row(
                         children: [
                           const Icon(Icons.location_pin),
-                          SizedBox(width: width * 0.02),
-                          Expanded(child: Text(address)),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              delivery.address,
+                              style: TextStyle(fontSize: width * 0.038),
+                            ),
+                          ),
                         ],
                       ),
-                      SizedBox(height: height * 0.02),
-
-                      // Goods Detail
+                      const SizedBox(height: 12),
                       Text(
                         'Goods Detail',
                         style: TextStyle(
@@ -693,74 +618,103 @@ class DeliveryDetailsPopUp extends StatelessWidget {
                           fontSize: width * 0.04,
                         ),
                       ),
-                      SizedBox(height: height * 0.01),
+                      const SizedBox(height: 8),
 
-                      // Items horizontally
+                      // Horizontal items
                       SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
                         child: Row(
-                          children: items.map((item) {
-                            return FutureBuilder<DocumentSnapshot>(
-                              future: FirebaseFirestore.instance
-                                  .collection('items')
-                                  .doc(item['itemID'])
-                                  .get(),
-                              builder: (context, snapshot) {
-                                if (!snapshot.hasData) return const SizedBox();
-                                final data = snapshot.data!.data() as Map<String, dynamic>?;
-                                final imageUrl = data?['imageUrl'] ?? '';
-                                return Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-                                  child: Container(
-                                    decoration: BoxDecoration(
-                                      border: Border.all(color: Colors.grey.shade100, width: 1.5),
-                                      borderRadius: BorderRadius.circular(6),
-                                    ),
-                                    child: ClipRRect(
-                                      borderRadius: BorderRadius.circular(6),
-                                      child: imageUrl.isNotEmpty
-                                          ? Image.network(
-                                        imageUrl,
-                                        width: 50,
-                                        height: 50,
-                                        fit: BoxFit.cover,
-                                      )
-                                          : Image.asset(
-                                        'assets/images/EngineOils.jpg',
-                                        width: 50,
-                                        height: 50,
-                                        fit: BoxFit.cover,
-                                      ),
-                                    ),
+                          children: delivery.items.map((item) {
+                            final cached = _itemCache[item['itemID']];
+                            final imageUrl = cached?['imageUrl'] ?? '';
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                              ),
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  border: Border.all(
+                                    color: Colors.grey.shade100,
+                                    width: 1.5,
                                   ),
-                                );
-                              },
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(6),
+                                  child: imageUrl.isNotEmpty
+                                      ? Image.network(
+                                    imageUrl,
+                                    width: 50,
+                                    height: 50,
+                                    fit: BoxFit.cover,
+                                  )
+                                      : Image.asset(
+                                    'assets/images/noimage.png',
+                                    width: 50,
+                                    height: 50,
+                                    fit: BoxFit.cover,
+                                  ),
+                                ),
+                              ),
                             );
                           }).toList(),
                         ),
                       ),
-                      SizedBox(height: height * 0.02),
 
-                      // Items vertical detail
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: items.map((item) {
-                          return FutureBuilder<DocumentSnapshot>(
-                            future: FirebaseFirestore.instance
-                                .collection('items')
-                                .doc(item['itemID'])
-                                .get(),
-                            builder: (context, snapshot) {
-                              if (!snapshot.hasData) return const SizedBox();
-                              final data = snapshot.data!.data() as Map<String, dynamic>?;
-                              final name = data?['itemName'] ?? 'Unknown';
-                              final price = (data?['price'] ?? 0).toDouble();
-                              final qty = item['quantity'] ?? 0;
-                              return Text(
-                                '• $name | RM ${price.toStringAsFixed(2)} x $qty',
-                                style: const TextStyle(color: Colors.grey),
-                              );
-                            },
+                      const SizedBox(height: 12),
+                      Table(
+                        columnWidths: const {
+                          0: FlexColumnWidth(5),
+                          1: FlexColumnWidth(2),
+                          2: FlexColumnWidth(1),
+                        },
+                        children: delivery.items.map((item) {
+                          final cached = _itemCache[item['itemID']];
+                          final name = cached?['itemName'] ?? 'Unknown';
+                          final price = (cached?['price'] ?? 0).toDouble();
+                          final qty = item['quantity'] ?? 0;
+
+                          return TableRow(
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 2,
+                                ),
+                                child: Text(
+                                  name,
+                                  style: TextStyle(
+                                    fontSize: width * 0.035,
+                                    color: Colors.grey,
+                                  ),
+                                ),
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 2,
+                                ),
+                                child: Text(
+                                  'RM ${price.toStringAsFixed(2)}',
+                                  style: TextStyle(
+                                    fontSize: width * 0.035,
+                                    color: Colors.grey,
+                                  ),
+                                  textAlign: TextAlign.right,
+                                ),
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 2,
+                                ),
+                                child: Text(
+                                  'x $qty',
+                                  style: TextStyle(
+                                    fontSize: width * 0.035,
+                                    color: Colors.grey,
+                                  ),
+                                  textAlign: TextAlign.right,
+                                ),
+                              ),
+                            ],
                           );
                         }).toList(),
                       ),
@@ -768,117 +722,73 @@ class DeliveryDetailsPopUp extends StatelessWidget {
                   ),
                 ),
               ),
-
-              SizedBox(height: height * 0.02),
-
-              // Fixed button
+              const SizedBox(height: 12),
+              // Buttons
               Builder(
                 builder: (_) {
-                  if (status == 'New Order') {
+                  if (delivery.status == 'New Order') {
                     return Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         ElevatedButton(
                           onPressed: () => Navigator.of(context).pop(),
                           style: ElevatedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(
-                              vertical: 5,
-                              horizontal: 38,
-                            ),
                             backgroundColor: Colors.grey.shade200,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(7),
-                            ),
                           ),
                           child: const Text(
                             'Cancel',
-                            style: TextStyle(
-                              color: Colors.grey,
-                              fontWeight: FontWeight.bold,
-                            ),
+                            style: TextStyle(color: Colors.grey),
                           ),
                         ),
                         ElevatedButton(
                           onPressed: () {
                             FirebaseFirestore.instance
                                 .collection('delivery')
-                                .doc(code)
+                                .doc(delivery.code)
                                 .update({'status': 'On-Going'});
                             Navigator.of(context).pop();
                           },
                           style: ElevatedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(
-                              vertical: 5,
-                              horizontal: 30,
-                            ),
-                            backgroundColor: const Color(0xFF1B6C07),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(7),
-                            ),
+                            backgroundColor: Color(0xFF1B6C07),
                           ),
                           child: const Text(
                             'Accepted',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                            ),
+                            style: TextStyle(color: Colors.white),
                           ),
                         ),
                       ],
                     );
-                  } else if (status == 'On-Going') {
+                  } else if (delivery.status == 'On-Going') {
                     return ElevatedButton(
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => GoogleMapPage(
-                              deliveryCode: code,
-                              deliveryAddress: address,
-                              deliveryLocation: location,
-                              deliveryStatus: status,
-                              deliveryItems: items,
-                            ),
+                      onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => GoogleMapPage(
+                            deliveryCode: delivery.code,
+                            deliveryAddress: delivery.address,
+                            deliveryLocation: location,
+                            deliveryStatus: delivery.status,
+                            deliveryItems: delivery.items,
                           ),
-                        );
-                      },
+                        ),
+                      ),
                       style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(
-                          vertical: 5,
-                          horizontal: 10,
-                        ),
-                        backgroundColor: const Color(0xFF1B6C07),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(7),
-                        ),
+                        backgroundColor: Color(0xFF1B6C07),
                       ),
                       child: const Text(
                         'Start Navigation',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                        ),
+                        style: TextStyle(color: Colors.white),
                       ),
                     );
                   } else {
                     return ElevatedButton(
                       onPressed: () => Navigator.of(context).pop(),
                       style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(
-                          vertical: 5,
-                          horizontal: 30,
-                        ),
-                        backgroundColor: const Color(0xFF1B6C07),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(7),
-                        ),
+                        backgroundColor: Color(0xFF1B6C07),
                       ),
                       child: const Text(
                         'Back',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                        ),
+                        style: TextStyle(color: Colors.white),
                       ),
                     );
                   }
