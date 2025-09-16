@@ -464,11 +464,10 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
       setState(() {
         _hasReachedDestination = true;
         _isNavigating = false;
-        _showDeliveryInfoCard = false; // Hide delivery info card when arrived
+        _polylines.clear();
+        _isExternalNavigationActive = false;
+        _showDeliveryInfoCard = true; // keep app visible
       });
-      
-      // Show arrival confirmation
-      _showArrivalConfirmation();
     }
   }
 
@@ -538,7 +537,15 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
         return AlertDialog(
           title: Row(
             children: [
-              const Icon(Icons.map, color: Colors.blue),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: Image.asset(
+                  'assets/images/logo.png',
+                  width: 22,
+                  height: 22,
+                  fit: BoxFit.cover,
+                ),
+              ),
               const SizedBox(width: 8),
               const Expanded(
                 child: Text(
@@ -556,7 +563,7 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
             TextButton(
               onPressed: () {
                 Navigator.of(context).pop();
-                // Stop navigation and hide route
+                // Stop navigation and hide route (stay on this page)
                 setState(() {
                   _isExternalNavigationActive = false;
                   _isNavigating = false;
@@ -1331,7 +1338,15 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
                   tooltip: 'Open in Google Maps',
                   onPressed: _openExternalGoogleMaps,
                   backgroundColor: Colors.white,
-                  child: const Icon(Icons.map, color: Colors.blue),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(28),
+                    child: Image.asset(
+                      'assets/images/logo.png',
+                      width: 28,
+                      height: 28,
+                      fit: BoxFit.cover,
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -1424,18 +1439,18 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
         // Draggable delivery info sheet: pull up/down like a drawer
         if (_showDeliveryInfoCard)
           DraggableScrollableSheet(
-            initialChildSize: 0.15, // collapsed height
-            minChildSize: 0.10,
-            maxChildSize: 0.50,
+            initialChildSize: 0.12, // collapsed height (shorter)
+            minChildSize: 0.08,
+            maxChildSize: 0.40,
             snap: true,
-            snapSizes: const [0.16, 0.50],
+            snapSizes: const [0.14, 0.40],
             builder: (context, scrollController) {
             return Container(
               decoration: const BoxDecoration(
                 color: Color(0xFF1B6C07),
                 borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
               ),
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
               child: SingleChildScrollView(
                 controller: scrollController,
                 physics: const BouncingScrollPhysics(),
@@ -1459,7 +1474,7 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
                           fontSize: 18,
                           fontWeight: FontWeight.bold),
                     ),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 4),
                     Row(
                       children: [
                         const Icon(Icons.location_on, color: Colors.white),
@@ -1474,7 +1489,7 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 4),
                     Row(
                       children: [
                         const Icon(Icons.timer, color: Colors.white),
@@ -1485,7 +1500,7 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 6),
                     if (_isNavigating && !_hasReachedDestination) ...[
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -1509,7 +1524,7 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
                           ],
                         ),
                       ),
-                      const SizedBox(height: 10),
+                      const SizedBox(height: 6),
                     ],
                     if (_hasReachedDestination) ...[
                       Container(
@@ -1534,7 +1549,7 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
                           ],
                         ),
                       ),
-                      const SizedBox(height: 10),
+                      const SizedBox(height: 6),
                     ],
                     if (_isExternalNavigationActive) ...[
                       Container(
@@ -1567,7 +1582,8 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
                           minimumSize: const Size.fromHeight(36),
                           foregroundColor: Colors.green),
                       onPressed: () {
-                        Navigator.push(
+                        // Replace Google Map with Confirmation page so back goes to delivery list
+                        Navigator.pushReplacement(
                           context,
                           MaterialPageRoute(builder: (context) => const ConfirmationPage()),
                         );
