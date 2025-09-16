@@ -1427,7 +1427,7 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
             ),
           ),
 
-        // Draggable delivery info sheet: pull up/down like a drawer
+        // Draggable delivery info
         if (_showDeliveryInfoCard)
           DraggableScrollableSheet(
             initialChildSize: 0.18,
