@@ -603,7 +603,7 @@ class DeliveryDetailsPopUp extends StatelessWidget {
                       ),
                       const SizedBox(height: 12),
                       Container(
-                        height: height * 0.25,
+                        height: height * 0.23,
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(color: Colors.grey.shade300),
@@ -631,18 +631,38 @@ class DeliveryDetailsPopUp extends StatelessWidget {
                           Expanded(
                             child: Text(
                               delivery.address,
-                              style: TextStyle(fontSize: width * 0.038),
+                              style: TextStyle(fontSize: width * 0.035),
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 12),
-                      Text(
-                        'Goods Detail',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: width * 0.04,
-                        ),
+                      const SizedBox(height: 17),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Goods Detail',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: width * 0.04,
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade200,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              '${delivery.items.length} item${delivery.items.length > 1 ? 's' : ''}',
+                              style: TextStyle(
+                                fontSize: width * 0.03,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.grey.shade700,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 8),
 
