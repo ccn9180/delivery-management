@@ -1,3 +1,4 @@
+import 'dart:async' show Timer;
 import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -7,6 +8,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:file_picker/file_picker.dart';
 import 'firebase_options.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 
 class ConfirmationPage extends StatefulWidget {
   final String? deliveryCode;
@@ -99,10 +101,42 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
   File? _imageFile;
   final ImagePicker _picker = ImagePicker();
 
+  // ✅ Added: Timer + confirmedAt
+  DateTime _currentTime = DateTime.now();
+  DateTime? _confirmedAt;
+  Timer? _timer;
+
+  String get currentDateFormatted {
+    final date = _confirmedAt ?? _currentTime;
+    return DateFormat('MMM d, yyyy').format(date);
+  }
+
+  String get currentTimeFormatted {
+    final date = _confirmedAt ?? _currentTime;
+    return DateFormat('h:mma').format(date).toLowerCase();
+  }
+
   @override
   void initState() {
     super.initState();
     _loadData();
+
+    // ✅ Start timer to update time every second
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+      } else {
+        setState(() {
+          _currentTime = DateTime.now();
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadData() async {
@@ -145,6 +179,15 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
 
         deliveryData = deliveryDoc.data() as Map<String, dynamic>;
         recipient = Recipient.fromMap(deliveryData!);
+
+        if (deliveryData!['deliveredAt'] != null) {
+          final dyn = deliveryData!['deliveredAt'];
+          if (dyn is Timestamp) {
+            _confirmedAt = dyn.toDate().toLocal();
+          } else if (dyn is DateTime) {
+            _confirmedAt = dyn.toLocal();
+          }
+        }
 
         if (deliveryData!['deliveryDate'] != null) {
           final dyn = deliveryData!['deliveryDate'];
@@ -231,61 +274,56 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
     }
   }
 
-  // ✅ Camera choice (front/rear)
-  Future<void> _chooseCamera() async {
-    final choice = await showDialog<CameraDevice>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text("Select Camera"),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, CameraDevice.rear),
-            child: const Text("Rear Camera"),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, CameraDevice.front),
-            child: const Text("Front Camera"),
-          ),
-        ],
-      ),
-    );
-
-    if (choice != null) {
-      _takePhoto(choice);
+  Future<void> _takePhoto() async {
+    try {
+      final XFile? pickedFile = await _picker.pickImage(
+          source: ImageSource.camera, imageQuality: 80);
+      if (pickedFile != null) {
+        setState(() {
+          _imageFile = File(pickedFile.path);
+        });
+      }
+    } catch (e) {
+      debugPrint("Error taking photo: $e");
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Failed to take photo: $e"), backgroundColor: Colors.red),
+      );
     }
   }
 
-  // ✅ Take photo
-  Future<void> _takePhoto(CameraDevice camera) async {
-    final XFile? pickedFile = await _picker.pickImage(
-      source: ImageSource.camera,
-      preferredCameraDevice: camera,
-    );
-    if (pickedFile != null) {
-      setState(() {
-        _imageFile = File(pickedFile.path);
-      });
-    }
-  }
-
-  // ✅ Gallery
   Future<void> _pickFromGallery() async {
-    final XFile? pickedFile =
-    await _picker.pickImage(source: ImageSource.gallery);
-    if (pickedFile != null) {
-      setState(() {
-        _imageFile = File(pickedFile.path);
-      });
+    try {
+      final XFile? pickedFile =
+      await _picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
+      if (pickedFile != null) {
+        setState(() {
+          _imageFile = File(pickedFile.path);
+        });
+      }
+    } catch (e) {
+      debugPrint("Error picking from gallery: $e");
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Failed to pick image: $e"), backgroundColor: Colors.red),
+      );
     }
   }
 
-  // ✅ File picker
   Future<void> _pickFile() async {
-    final result = await FilePicker.platform.pickFiles(type: FileType.image);
-    if (result != null && result.files.single.path != null) {
-      setState(() {
-        _imageFile = File(result.files.single.path!);
-      });
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.image,
+        allowCompression: true,
+      );
+      if (result != null && result.files.single.path != null) {
+        setState(() {
+          _imageFile = File(result.files.single.path!);
+        });
+      }
+    } catch (e) {
+      debugPrint("Error picking file: $e");
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Failed to pick file: $e"), backgroundColor: Colors.red),
+      );
     }
   }
 
@@ -304,7 +342,7 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
                 title: const Text("Take Photo"),
                 onTap: () {
                   Navigator.pop(context);
-                  _chooseCamera();
+                  _takePhoto();
                 },
               ),
               ListTile(
@@ -330,7 +368,6 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
     );
   }
 
-  // ✅ Show error message if no image is uploaded
   void _showImageRequiredError() {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
@@ -341,7 +378,6 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
     );
   }
 
-  // ✅ Handle confirmation with image validation
   Future<void> _handleConfirmation() async {
     if (_imageFile == null) {
       _showImageRequiredError();
@@ -349,18 +385,151 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
     }
 
     final docIdToUpdate = _deliveryDocId ?? widget.deliveryCode;
-    if (docIdToUpdate != null && docIdToUpdate.isNotEmpty) {
+    if (docIdToUpdate == null || docIdToUpdate.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Invalid delivery reference'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    // Check if file exists
+    if (!_imageFile!.existsSync()) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Selected image file does not exist'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    String? proofUrl;
+    bool uploadSuccess = false;
+
+    try {
+      // Show loading indicator
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (BuildContext context) {
+          return const AlertDialog(
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(height: 16),
+                Text('Uploading proof of delivery...'),
+              ],
+            ),
+          );
+        },
+      );
+
+      // ✅ Make unique filename per delivery + timestamp
+      final fileName = 'deliveryProofs/${docIdToUpdate}_${DateTime.now().millisecondsSinceEpoch}.jpg';
+      final ref = FirebaseStorage.instance.ref().child(fileName);
+
+      // ✅ Upload with metadata
+      final uploadTask = ref.putFile(
+        _imageFile!,
+        SettableMetadata(
+          contentType: 'image/jpeg',
+          customMetadata: {
+            'uploadedBy': deliveryPersonnel?.name ?? 'Unknown',
+            'deliveryCode': widget.deliveryCode ?? 'Unknown',
+            'uploadedAt': DateTime.now().toIso8601String(),
+          },
+        ),
+      );
+
+      // Listen for state changes and errors
+      uploadTask.snapshotEvents.listen((taskSnapshot) {
+        debugPrint('Upload state: ${taskSnapshot.state}');
+        debugPrint('Bytes transferred: ${taskSnapshot.bytesTransferred} of ${taskSnapshot.totalBytes}');
+      }, onError: (e) {
+        debugPrint('Upload error: $e');
+      });
+
+      // Wait for upload to complete
+      await uploadTask.whenComplete(() {});
+
+      // ✅ Get download URL after upload success
+      proofUrl = await ref.getDownloadURL();
+      uploadSuccess = true;
+      debugPrint('Upload successful. Download URL: $proofUrl');
+
+    } catch (e) {
+      debugPrint("Error uploading proof: $e");
+      // Close loading dialog
+      if (Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Upload failed: ${e.toString()}"),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 5),
+        ),
+      );
+      return;
+    }
+
+    // Close loading dialog
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    }
+
+    if (!uploadSuccess || proofUrl == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Upload failed. Please try again.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    final now = DateTime.now();
+    setState(() {
+      _confirmedAt = now;
+    });
+    _timer?.cancel();
+
+    try {
       await FirebaseFirestore.instance
           .collection('delivery')
           .doc(docIdToUpdate)
           .update({
         'status': 'Delivered',
-        'deliveredAt': FieldValue.serverTimestamp(),
+        'deliveredAt': now, // ✅ stores phone's current date+time
+        'deliveryProof': proofUrl,
+        'confirmedBy': deliveryPersonnel?.name ?? 'Unknown',
       });
-    }
 
-    if (mounted) {
-      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Delivery confirmed!"),
+          backgroundColor: Colors.green,
+          duration: Duration(seconds: 2),
+        ),
+      );
+
+      // Wait a moment before navigating back
+      await Future.delayed(const Duration(seconds: 2));
+
+      if (mounted) Navigator.pop(context);
+    } catch (e) {
+      debugPrint("Firestore update failed: $e");
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Failed to save proof: $e"),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 
@@ -380,6 +549,11 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
         body: const Center(child: Text('Delivery data is null')),
       );
     }
+
+    // Get current phone local date and time
+    final now = DateTime.now();
+    final currentDate = DateFormat('MMM d, yyyy').format(now);
+    final currentTime = DateFormat('h:mma').format(now).toLowerCase();
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -407,13 +581,13 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
           children: [
             const SizedBox(height: 15),
             Text(
-              'Date: ${deliveryDateFormatted ?? "N/A"}',
+              'Date: $currentDate',
               style: const TextStyle(
                 fontSize: 10,
                 fontWeight: FontWeight.bold,
               ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 10),
             Text(
               'From: ${deliveryPersonnel?.name ?? "N/A"} | Greenstem Business Software | [${deliveryPersonnel?.email ?? "N/A"}]',
               style: const TextStyle(
@@ -422,7 +596,7 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
                 color: Colors.black,
               ),
             ),
-            const SizedBox(height: 15),
+            const SizedBox(height: 10),
             Text(
               'To: ${recipient?.name ?? "N/A"} | ${recipient?.email ?? "N/A"} | ${recipient?.address ?? "N/A"}',
               style: const TextStyle(
@@ -431,14 +605,16 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
                 color: Colors.black,
               ),
             ),
-            const SizedBox(height: 30),
+            const SizedBox(height: 50),
 
-            /// Items Table
+            /// Items Table - Using phone local time
             Table(
-              border: TableBorder.all(color: Colors.grey.shade300),
+              border: TableBorder.symmetric(
+                inside: BorderSide(color: Colors.grey.shade300),
+              ),
               columnWidths: const {
                 0: FlexColumnWidth(2),
-                1: FlexColumnWidth(1),
+                1: FlexColumnWidth(1.5),
                 2: FlexColumnWidth(2),
                 3: FlexColumnWidth(2),
                 4: FlexColumnWidth(1.5),
@@ -448,65 +624,82 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
                   children: [
                     Padding(
                         padding: EdgeInsets.all(8),
-                        child: Text('Item(s) Delivered',
-                            style: TextStyle(
-                                fontSize: 10.5, fontWeight: FontWeight.bold))),
+                        child: Center(
+                          child: Text('Item(s) Delivered',
+                              style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                        )),
                     Padding(
                         padding: EdgeInsets.all(8),
-                        child: Text('Quantity',
-                            style: TextStyle(
-                                fontSize: 10.5, fontWeight: FontWeight.bold))),
+                        child: Center(
+                          child: Text('Quantity',
+                              style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                        )),
                     Padding(
                         padding: EdgeInsets.all(8),
-                        child: Text('Tracking Number',
-                            style: TextStyle(
-                                fontSize: 10.5, fontWeight: FontWeight.bold))),
+                        child: Center(
+                          child: Text('Tracking Number',
+                              style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                        )),
                     Padding(
                         padding: EdgeInsets.all(8),
-                        child: Text('Delivery Date',
-                            style: TextStyle(
-                                fontSize: 10.5, fontWeight: FontWeight.bold))),
+                        child: Center(
+                          child: Text('Delivery Date',
+                              style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                        )),
                     Padding(
                         padding: EdgeInsets.all(8),
-                        child: Text('Delivery Time',
-                            style: TextStyle(
-                                fontSize: 10.5, fontWeight: FontWeight.bold))),
+                        child: Center(
+                          child: Text('Delivery Time',
+                              style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                        )),
                   ],
                 ),
-                ...deliveryItems.map((item) => TableRow(
-                  children: [
-                    Padding(
-                        padding: const EdgeInsets.all(8),
-                        child: Text(item.itemID,
-                            style: const TextStyle(fontSize: 10.5))),
-                    Padding(
-                        padding: const EdgeInsets.all(8),
-                        child: Text(item.quantity.toString(),
-                            style: const TextStyle(fontSize: 10.5))),
-                    Padding(
-                        padding: const EdgeInsets.all(8),
-                        child: Text(widget.deliveryCode ?? 'N/A',
-                            style: const TextStyle(fontSize: 10.5))),
-                    Padding(
-                        padding: const EdgeInsets.all(8),
-                        child: Text(deliveryDateFormatted ?? 'N/A',
-                            style: const TextStyle(fontSize: 10.5))),
-                    Padding(
-                        padding: const EdgeInsets.all(8),
-                        child: Text(deliveryTimeFormatted ?? 'N/A',
-                            style: const TextStyle(fontSize: 10.5))),
-                  ],
-                )),
+                ...deliveryItems.map((item) {
+                  return TableRow(
+                    children: [
+                      Padding(
+                          padding: const EdgeInsets.all(8),
+                          child: Center(
+                            child: Text(item.itemID,
+                                style: const TextStyle(fontSize: 10)),
+                          )),
+                      Padding(
+                          padding: const EdgeInsets.all(8),
+                          child: Center(
+                            child: Text(item.quantity.toString(),
+                                style: const TextStyle(fontSize: 10)),
+                          )),
+                      Padding(
+                          padding: const EdgeInsets.all(8),
+                          child: Center(
+                            child: Text(widget.deliveryCode ?? 'N/A',
+                                style: const TextStyle(fontSize: 10)),
+                          )),
+                      Padding(
+                          padding: const EdgeInsets.all(8),
+                          child: Center(
+                            child: Text(currentDate,
+                                style: const TextStyle(fontSize: 10)),
+                          )),
+                      Padding(
+                          padding: const EdgeInsets.all(8),
+                          child: Center(
+                            child: Text(currentTime,
+                                style: const TextStyle(fontSize: 10)),
+                          )),
+                    ],
+                  );
+                }),
               ],
             ),
 
-            const SizedBox(height: 30),
+            const SizedBox(height: 50),
 
             /// Confirmation Summary
             const Text(
               'Confirmation Summary',
               style: TextStyle(
-                fontSize: 16,
+                fontSize: 10,
                 fontWeight: FontWeight.bold,
                 color: Colors.black,
               ),
@@ -517,55 +710,62 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
                 children: [
                   const TextSpan(
                     text: 'Your items were delivered on ',
-                    style: TextStyle(fontSize: 14),
+                    style: TextStyle(fontSize: 10),
                   ),
                   TextSpan(
-                    text: deliveryDateFormatted ?? 'N/A',
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    text: currentDateFormatted,
+                    style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
                   ),
                   const TextSpan(
                     text: ', at ',
-                    style: TextStyle(fontSize: 14),
+                    style: TextStyle(fontSize: 10),
                   ),
                   TextSpan(
-                    text: deliveryTimeFormatted ?? 'N/A',
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    text: currentTimeFormatted,
+                    style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
                   ),
                   const TextSpan(
-                    text:
-                    '. Please check the items and contact us if there are any issues.',
-                    style: TextStyle(fontSize: 14),
+                    text: '. Please check the items and contact us if there are any issues.',
+                    style: TextStyle(fontSize: 10),
                   ),
                 ],
               ),
               style: const TextStyle(height: 1.5),
             ),
 
-            const SizedBox(height: 20),
+            const SizedBox(height: 10),
 
-            // Image upload section with clear instructions
+            // Image upload section
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const SizedBox(height: 10),
+                const SizedBox(height: 5),
                 GestureDetector(
                   onTap: _showImageSourceActionSheet,
                   child: Container(
                     height: 140,
+                    width: 160,
                     decoration: BoxDecoration(
                       color: Colors.grey.shade300,
                       borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.3),
+                          offset: const Offset(4, 6),
+                          blurRadius: 8,
+                          spreadRadius: 1,
+                        ),
+                      ],
                     ),
                     child: _imageFile == null
-                        ? const Center(
-                      child: Icon(Icons.camera_alt_outlined,
-                          size: 40, color: Colors.black54),
+                        ? const Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.camera_alt_outlined,
+                            size: 40, color: Colors.black54),
+                        SizedBox(height: 8),
+                      ],
                     )
                         : ClipRRect(
                       borderRadius: BorderRadius.circular(12),
@@ -581,6 +781,15 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
             ),
 
             const SizedBox(height: 20),
+
+            Text.rich(
+              const TextSpan(
+                text: 'Thank you for choosing our services, Please do not hesitate to reach out if you have any concerns regarding this delivery.',
+                style: TextStyle(fontSize: 10),
+              ),
+            ),
+
+            const SizedBox(height: 100),
 
             /// Buttons
             Row(
@@ -671,7 +880,7 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
             const Icon(Icons.error_outline, size: 64, color: Colors.red),
             const SizedBox(height: 20),
             Text(
-              errorMessage!,
+              errorMessage ?? 'An error occurred',
               textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 16),
             ),
