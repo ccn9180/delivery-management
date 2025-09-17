@@ -44,7 +44,7 @@ class WelcomePage extends StatelessWidget {
 
                     // Title
                     Text(
-                      "Welcome to SWPS",
+                      "Welcome to SPMS",
                       style: TextStyle(
                         fontSize: screenHeight * 0.035,
                         fontWeight: FontWeight.bold,

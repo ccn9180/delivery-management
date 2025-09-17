@@ -437,7 +437,29 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
         'deliveryProof': proofBase64, // store image as Base64 string
       });
 
-      debugPrint('✅ Firestore updated successfully with Base64 image.');
+      final String employeeID = deliveryData?['employeeID'] ?? '';
+      if (employeeID.isNotEmpty) {
+        final userQuery = await FirebaseFirestore.instance
+            .collection('users')
+            .where('employeeID', isEqualTo: employeeID)
+            .limit(1)
+            .get();
+
+
+        if (userQuery.docs.isNotEmpty) {
+          final userDocId = userQuery.docs.first.id;
+
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(userDocId)
+              .update({
+            'deliveredCount': FieldValue.increment(1),
+          });
+          debugPrint("✅ Delivery count updated for employeeID: $employeeID");
+        } else {
+          debugPrint("⚠️ No user found with employeeID: $employeeID");
+        }
+      }
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(

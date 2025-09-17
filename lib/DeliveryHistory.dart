@@ -1,9 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:delivery/widget/header.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'homepage.dart'; // deliveryCard widget
+import 'homepage.dart';
 
 class DeliveryHistory extends StatefulWidget {
   const DeliveryHistory({super.key});
@@ -113,52 +112,65 @@ class _DeliveryHistoryState extends State<DeliveryHistory> {
                   }
                   final deliveries = snapshot.data ?? [];
 
-                  // Apply search filter if text is entered
+                  // Apply search filter
                   final filtered = _searchQuery.isNotEmpty
                       ? deliveries.where((d) =>
                   d.code.toLowerCase().contains(_searchQuery) ||
-                      DateFormat('dd/MM/yyyy').format(d.date).toLowerCase().contains(_searchQuery)
-                  ).toList()
+                      DateFormat('dd/MM/yyyy')
+                          .format(d.date)
+                          .toLowerCase()
+                          .contains(_searchQuery))
+                      .toList()
                       : deliveries;
 
                   if (filtered.isEmpty) {
                     return _emptyState();
                   }
 
-                  final isWide = width > 600;
-                  return isWide
-                      ? GridView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 2,
-                      mainAxisSpacing: 16,
-                      crossAxisSpacing: 16,
-                      childAspectRatio: 3.5,
-                    ),
-                    itemCount: filtered.length,
-                    itemBuilder: (context, index) {
-                      final d = filtered[index];
-                      return deliveryCard(
-                        context: context,
-                        delivery: d,
-                        date: DateFormat('dd/MM/yyyy').format(d.date),
-                        time: DateFormat('hh:mm a').format(d.date),
-                      );
-                    },
-                  )
-                      : ListView.builder(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: filtered.length,
-                    itemBuilder: (context, index) {
-                      final d = filtered[index];
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 16),
-                        child: deliveryCard(
-                          context: context,
-                          delivery: d,
-                          date: DateFormat('dd/MM/yyyy').format(d.date),
-                          time: DateFormat('hh:mm a').format(d.date),
+                  // ✅ Wait for item preload before building UI
+                  return FutureBuilder<void>(
+                    future: preloadItems(filtered), // your preload method
+                    builder: (context, preloadSnap) {
+                      if (preloadSnap.connectionState == ConnectionState.waiting) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+
+                      final isWide = width > 600;
+                      return isWide
+                          ? GridView.builder(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 2,
+                          mainAxisSpacing: 16,
+                          crossAxisSpacing: 16,
+                          childAspectRatio: 3.5,
                         ),
+                        itemCount: filtered.length,
+                        itemBuilder: (context, index) {
+                          final d = filtered[index];
+                          return deliveryCard(
+                            context: context,
+                            delivery: d,
+                            date: DateFormat('dd/MM/yyyy').format(d.date),
+                            time: DateFormat('hh:mm a').format(d.date),
+                          );
+                        },
+                      )
+                          : ListView.builder(
+                        padding: const EdgeInsets.all(16),
+                        itemCount: filtered.length,
+                        itemBuilder: (context, index) {
+                          final d = filtered[index];
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 16),
+                            child: deliveryCard(
+                              context: context,
+                              delivery: d,
+                              date: DateFormat('dd/MM/yyyy').format(d.date),
+                              time: DateFormat('hh:mm a').format(d.date),
+                            ),
+                          );
+                        },
                       );
                     },
                   );

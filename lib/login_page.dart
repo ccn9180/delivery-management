@@ -154,7 +154,7 @@ class _LoginPageState extends State<LoginPage> {
 
                           // Title
                           Text(
-                            "Login to SWPS",
+                            "Login to SPMS",
                             style: TextStyle(
                               fontSize: screenHeight * 0.035,
                               fontWeight: FontWeight.bold,
@@ -287,8 +287,6 @@ class _LoginPageState extends State<LoginPage> {
                               ],
                             ),
                           ),
-
-                          Spacer(),
                         ],
                       ),
                     ),
