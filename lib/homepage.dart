@@ -14,6 +14,7 @@ class Delivery {
   final DateTime date;
   final String status;
   final List<Map<String, dynamic>> items;
+  final String? reason;
 
   Delivery({
     required this.code,
@@ -21,6 +22,7 @@ class Delivery {
     required this.date,
     required this.status,
     required this.items,
+    this.reason,
   });
 
   factory Delivery.fromDoc(DocumentSnapshot doc) {
@@ -31,6 +33,7 @@ class Delivery {
       date: (data['deliveryDate'] as Timestamp).toDate().toLocal(),
       status: data['status'] ?? 'New Order',
       items: List<Map<String, dynamic>>.from(data['deliveryItems'] ?? []),
+      reason: data['reason'],
     );
   }
 }
@@ -182,7 +185,7 @@ class DeliveryListPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 3,
+      length: 4,
       child: Scaffold(
         backgroundColor: Colors.white,
         body: SafeArea(
@@ -196,36 +199,52 @@ class DeliveryListPage extends StatelessWidget {
                   builder: (context, snapshot) {
                     final deliveries = snapshot.data ?? [];
                     final total = deliveries.length;
-                    final delivered = deliveries
-                        .where((d) => d.status == 'Delivered')
-                        .length;
-                    final progress = total == 0 ? 0.0 : delivered / total;
+                    final delivered = deliveries.where((d) => d.status == 'Delivered').length;
+                    final failed = deliveries.where((d) => d.status == 'Failed').length;
+
+                    final deliveredProgress = total == 0 ? 0.0 : delivered / total;
+                    final failedProgress = total == 0 ? 0.0 : failed / total;
 
                     return SizedBox(
-                      width: 50,
-                      height: 50,
-                      child: Stack(
-                        alignment: Alignment.center,
-                        children: [
-                          CircularProgressIndicator(
-                            value: progress,
-                            strokeWidth: 6,
-                            backgroundColor: Colors.grey.shade200,
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                              delivered == total && total != 0
-                                  ? Colors.green
-                                  : Colors.orange,
-                            ),
+                    width: 50,
+                    height: 50,
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        // Background circle (gray for remaining)
+                        CircularProgressIndicator(
+                          value: 1.0,
+                          strokeWidth: 6,
+                          backgroundColor: Colors.grey.shade200,
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.grey.shade200),
+                        ),
+
+                        // Failed portion
+                        CircularProgressIndicator(
+                          value: failedProgress,
+                          strokeWidth: 6,
+                          backgroundColor: Colors.transparent,
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.red),
+                        ),
+
+                        // Delivered portion (on top of failed)
+                        CircularProgressIndicator(
+                          value: deliveredProgress,
+                          strokeWidth: 6,
+                          backgroundColor: Colors.transparent,
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.green),
+                        ),
+
+                        // Center text
+                        Text(
+                          "$delivered/$total",
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
                           ),
-                          Text(
-                            "$delivered/$total",
-                            style: const TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
+                        ),
+                      ],
+                    ),
                     );
                   },
                 ),
@@ -246,6 +265,7 @@ class DeliveryListPage extends StatelessWidget {
                   Tab(text: "New Order"),
                   Tab(text: "On-Going"),
                   Tab(text: "Delivered"),
+                  Tab(text:"Failed")
                 ],
               ),
 
@@ -271,6 +291,9 @@ class DeliveryListPage extends StatelessWidget {
                     final finished = deliveries
                         .where((d) => d.status == 'Delivered')
                         .toList();
+                    final failed = deliveries
+                        .where((d) => d.status == 'Failed')
+                        .toList();
 
                     final dateFormat = DateFormat('dd/MM/yyyy');
                     final timeFormat = DateFormat('hh:mm a');
@@ -288,6 +311,10 @@ class DeliveryListPage extends StatelessWidget {
                         DeliveryListTab(
                           deliveries: finished,
                           emptyMessages: "No completed deliveries",
+                        ),
+                        DeliveryListTab(
+                          deliveries: failed,
+                          emptyMessages: "No failed deliveries",
                         ),
                       ],
                     );
@@ -492,7 +519,7 @@ Widget deliveryCard({
                             ),
                           ),
                           const Spacer(),
-                          if (status == 'On-Going' || status == 'Delivered')
+                          if (status == 'On-Going' || status == 'Delivered'|| status == 'Failed')
                             Transform.translate(
                               offset: const Offset(0, -14.5),
                               child: Container(
@@ -503,6 +530,8 @@ Widget deliveryCard({
                                 decoration: BoxDecoration(
                                   color: status == 'Delivered'
                                       ? Colors.green.shade100
+                                      : status == 'Failed'
+                                      ? Colors.red.shade100
                                       : Colors.blue.shade100,
                                   borderRadius: BorderRadius.circular(20),
                                 ),
@@ -512,6 +541,8 @@ Widget deliveryCard({
                                     fontSize: 12,
                                     color: status == 'Delivered'
                                         ? Colors.green
+                                        : status == 'Failed'
+                                        ? Colors.red
                                         : Colors.blueGrey,
                                     fontWeight: FontWeight.bold,
                                   ),
@@ -603,7 +634,7 @@ class DeliveryDetailsPopUp extends StatelessWidget {
                       ),
                       const SizedBox(height: 12),
                       Container(
-                        height: height * 0.25,
+                        height: height * 0.23,
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(color: Colors.grey.shade300),
@@ -631,18 +662,38 @@ class DeliveryDetailsPopUp extends StatelessWidget {
                           Expanded(
                             child: Text(
                               delivery.address,
-                              style: TextStyle(fontSize: width * 0.038),
+                              style: TextStyle(fontSize: width * 0.035),
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 12),
-                      Text(
-                        'Goods Detail',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: width * 0.04,
-                        ),
+                      const SizedBox(height: 17),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Goods Detail',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: width * 0.04,
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade200,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              '${delivery.items.length} item${delivery.items.length > 1 ? 's' : ''}',
+                              style: TextStyle(
+                                fontSize: width * 0.03,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.grey.shade700,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 8),
 
@@ -754,57 +805,175 @@ class DeliveryDetailsPopUp extends StatelessWidget {
                 builder: (_) {
                   if (delivery.status == 'New Order') {
                     return Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        ElevatedButton(
-                          onPressed: () => Navigator.of(context).pop(),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.grey.shade200,
-                          ),
-                          child: const Text(
-                            'Cancel',
-                            style: TextStyle(color: Colors.grey),
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: () => Navigator.of(context).pop(),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.grey.shade200,
+                            ),
+                            child: const Text(
+                              'Cancel',
+                              style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold),
+                            ),
                           ),
                         ),
-                        ElevatedButton(
-                          onPressed: () {
-                            FirebaseFirestore.instance
-                                .collection('delivery')
-                                .doc(delivery.code)
-                                .update({'status': 'On-Going'});
-                            Navigator.of(context).pop();
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Color(0xFF1B6C07),
-                          ),
-                          child: const Text(
-                            'Accepted',
-                            style: TextStyle(color: Colors.white),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: () {
+                              FirebaseFirestore.instance
+                                  .collection('delivery')
+                                  .doc(delivery.code)
+                                  .update({'status': 'On-Going'});
+                              Navigator.of(context).pop();
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Color(0xFF1B6C07),
+                            ),
+                            child: const Text(
+                              'Accepted',
+                              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                            ),
                           ),
                         ),
                       ],
                     );
                   } else if (delivery.status == 'On-Going') {
-                    return ElevatedButton(
-                      onPressed: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => GoogleMapPage(
-                            deliveryCode: delivery.code,
-                            deliveryAddress: delivery.address,
-                            deliveryLocation: location,
-                            deliveryStatus: delivery.status,
-                            deliveryItems: delivery.items,
+                    return Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: () => Navigator.of(context).pop(),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.grey.shade200,
+                            ),
+                            child: const Text(
+                              'Back',
+                              style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold),
+                            ),
                           ),
                         ),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Color(0xFF1B6C07),
-                      ),
-                      child: const Text(
-                        'Start Navigation',
-                        style: TextStyle(color: Colors.white),
-                      ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => GoogleMapPage(
+                                  deliveryCode: delivery.code,
+                                  deliveryAddress: delivery.address,
+                                  deliveryLocation: location,
+                                  deliveryStatus: delivery.status,
+                                  deliveryItems: delivery.items,
+                                ),
+                              ),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Color(0xFF1B6C07),
+                            ),
+                            child: const Text(
+                              'Navigation',
+                              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ),
+                      ],
+                    );
+                  } else if (delivery.status == 'Failed') {
+                    return Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: () => Navigator.of(context).pop(),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.grey.shade200,
+                            ),
+                            child: const Text(
+                              'Back',
+                              style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: () {
+                              showDialog(
+                                context: context,
+                                builder: (context) => AlertDialog(
+                                  title: const Text(
+                                    "Reason for Failure",
+                                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
+                                  ),
+                                  content: Text(delivery.reason ?? "No reason provided"),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () => Navigator.of(context).pop(),
+                                      child: const Text("Close"),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.red.shade400,
+                            ),
+                            child: const Text(
+                              'View Reason',
+                              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ),
+                      ],
+                    );
+                  } else if (delivery.status == 'Delivered') {
+                    return Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: () => Navigator.of(context).pop(),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.grey.shade200,
+                            ),
+                            child: const Text(
+                              'Back',
+                              style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: () {
+                              // Open delivered confirmation details
+                              showDialog(
+                                context: context,
+                                builder: (context) => AlertDialog(
+                                  title: const Text(
+                                    "Delivery Confirmation",
+                                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
+                                  ),
+                                  content: Text("View delivered confirmation details here."),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () => Navigator.of(context).pop(),
+                                      child: const Text("Close"),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Color(0xFF1B6C07),
+                            ),
+                            child: const Text(
+                              'View Details',
+                              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ),
+                      ],
                     );
                   } else {
                     return ElevatedButton(
@@ -819,7 +988,7 @@ class DeliveryDetailsPopUp extends StatelessWidget {
                     );
                   }
                 },
-              ),
+              )
             ],
           ),
         ),

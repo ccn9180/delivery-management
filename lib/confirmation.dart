@@ -102,7 +102,6 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
   File? _imageFile;
   final ImagePicker _picker = ImagePicker();
 
-  // ✅ Added: Timer + confirmedAt
   DateTime _currentTime = DateTime.now();
   DateTime? _confirmedAt;
   Timer? _timer;
@@ -414,7 +413,9 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
           .update({
         'status': 'Delivered',
         'deliveredAt': now,
+
         'deliveryProof': imageUrl, // Store as base64 URL
+
       });
 
       ScaffoldMessenger.of(context).showSnackBar(

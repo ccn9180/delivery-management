@@ -3,16 +3,19 @@ import 'dart:convert';
 import 'dart:math';
 import 'dart:ui' as ui;
 import 'dart:typed_data';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:delivery/changepassword.dart';
 import 'package:delivery/confirmation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show ByteData;
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:permission_handler/permission_handler.dart' as permission_handler_plugin;
+import 'package:permission_handler/permission_handler.dart'
+    as permission_handler_plugin;
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 import 'config.dart';
+import 'homepage.dart';
 
 // Simple container for Directions steps (used for showing road/instruction names)
 class _NavStep {
@@ -63,6 +66,9 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
   bool _locationServiceEnabled = false;
   LocationPermission _locationPermission = LocationPermission.denied;
 
+  final reasonController = TextEditingController();
+  bool showReasonField = false;
+
   // Navigation related variables
   bool _isNavigating = false;
   bool _isCalculatingRoute = false;
@@ -75,12 +81,13 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
   bool _isFollowMode = true; // camera follows heading like turn-by-turn
   bool _userInteracting = false;
   BitmapDescriptor? _navArrowIcon;
-  
+
   // Enhanced navigation state management
   bool _hasReachedDestination = false;
   bool _isExternalNavigationActive = false;
   bool _showDeliveryInfoCard = true;
-  double _arrivalThreshold = Config.arrivalThresholdMeters; // meters - consider arrived when within this distance
+  double _arrivalThreshold = Config
+      .arrivalThresholdMeters; // meters - consider arrived when within this distance
   _AppLifecycleObserver? _lifecycleObserver;
 
   // Navigation direction variables
@@ -93,8 +100,10 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
   List<_NavStep> _navSteps = [];
 
   // Default delivery destination from configuration (used if widget doesn't pass one)
-  static final LatLng _defaultDestination =
-  LatLng(Config.deliveryLatitude, Config.deliveryLongitude);
+  static final LatLng _defaultDestination = LatLng(
+    Config.deliveryLatitude,
+    Config.deliveryLongitude,
+  );
 
   @override
   void initState() {
@@ -102,7 +111,7 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initializeLocationAndMap();
     });
-    
+
     // Listen for app lifecycle changes to detect return from external navigation
     _lifecycleObserver = _AppLifecycleObserver(
       onResume: () {
@@ -131,7 +140,8 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
         if (!_locationServiceEnabled) {
           if (mounted) {
             setState(() {
-              _errorMessage = 'Location services are disabled. Please enable them in your device settings.';
+              _errorMessage =
+                  'Location services are disabled. Please enable them in your device settings.';
               _isLoading = false;
             });
           }
@@ -145,7 +155,8 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
         if (_locationPermission == LocationPermission.denied) {
           if (mounted) {
             setState(() {
-              _errorMessage = 'Location permission denied. Please grant permission to use this feature.';
+              _errorMessage =
+                  'Location permission denied. Please grant permission to use this feature.';
               _isLoading = false;
             });
           }
@@ -159,7 +170,8 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
         if (_locationPermission == LocationPermission.deniedForever) {
           if (mounted) {
             setState(() {
-              _errorMessage = 'Location permission is permanently denied. Please enable it from the app settings.';
+              _errorMessage =
+                  'Location permission is permanently denied. Please enable it from the app settings.';
               _isLoading = false;
             });
           }
@@ -241,33 +253,41 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
     }
 
     _positionStream?.cancel();
-    _positionStream = Geolocator.getPositionStream(
-      locationSettings: LocationSettings(
-        accuracy: LocationAccuracy.bestForNavigation,
-        distanceFilter: (_isNavigating ? Config.navigationUpdateDistance : Config.locationUpdateDistance).toInt(),
-      ),
-    ).listen(
+    _positionStream =
+        Geolocator.getPositionStream(
+          locationSettings: LocationSettings(
+            accuracy: LocationAccuracy.bestForNavigation,
+            distanceFilter:
+                (_isNavigating
+                        ? Config.navigationUpdateDistance
+                        : Config.locationUpdateDistance)
+                    .toInt(),
+          ),
+        ).listen(
           (Position position) {
-        if (mounted) {
-          setState(() {
-            _currentPosition = LatLng(position.latitude, position.longitude);
-          });
-          if (_isNavigating && _destination != null) {
-            _updateNavigation(position);
-            // If we already have a route, keep it; otherwise draw now
-            if (_polylines.isEmpty) {
-              _showRouteDirection(_currentPosition!, _destination!);
-            } else {
-              _maybeReroute();
+            if (mounted) {
+              setState(() {
+                _currentPosition = LatLng(
+                  position.latitude,
+                  position.longitude,
+                );
+              });
+              if (_isNavigating && _destination != null) {
+                _updateNavigation(position);
+                // If we already have a route, keep it; otherwise draw now
+                if (_polylines.isEmpty) {
+                  _showRouteDirection(_currentPosition!, _destination!);
+                } else {
+                  _maybeReroute();
+                }
+              }
             }
-          }
-        }
-      },
-      onError: (error) {
-        debugPrint('Location tracking error: $error');
-        // Don't show error to user, just log it
-      },
-    );
+          },
+          onError: (error) {
+            debugPrint('Location tracking error: $error');
+            // Don't show error to user, just log it
+          },
+        );
   }
 
   // Open native Google Maps (or web) for full turn-by-turn with road names
@@ -275,15 +295,17 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
     if (_destination == null) return;
     final LatLng dest = _destination!;
     final LatLng origin = _currentPosition ?? dest;
-    
+
     // Create deep link URL for Google Maps navigation
     final Uri uri = Uri.parse(
-        'https://www.google.com/maps/dir/?api=1&origin=${origin.latitude},${origin.longitude}&destination=${dest.latitude},${dest.longitude}&travelmode=driving&dir_action=navigate');
-    
+      'https://www.google.com/maps/dir/?api=1&origin=${origin.latitude},${origin.longitude}&destination=${dest.latitude},${dest.longitude}&travelmode=driving&dir_action=navigate',
+    );
+
     if (await canLaunchUrl(uri)) {
       setState(() {
         _isExternalNavigationActive = true;
-        _showDeliveryInfoCard = false; // Hide delivery info when external navigation is active
+        _showDeliveryInfoCard =
+            false; // Hide delivery info when external navigation is active
       });
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     }
@@ -291,11 +313,16 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
 
   // Check if off-route or time-based refresh required, then reroute
   void _maybeReroute() {
-    if (_currentPosition == null || _destination == null || _routePoints.isEmpty) return;
+    if (_currentPosition == null ||
+        _destination == null ||
+        _routePoints.isEmpty)
+      return;
 
     final DateTime now = DateTime.now();
     // time-based refresh
-    if (_lastRerouteAt == null || now.difference(_lastRerouteAt!).inSeconds >= Config.periodicRerouteSeconds) {
+    if (_lastRerouteAt == null ||
+        now.difference(_lastRerouteAt!).inSeconds >=
+            Config.periodicRerouteSeconds) {
       _lastRerouteAt = now;
       _showRouteDirection(_currentPosition!, _destination!);
       return;
@@ -318,7 +345,7 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
     if (mounted && _mapController != null && _currentPosition != null) {
       // Check if driver has reached destination
       _checkDestinationArrival();
-      
+
       setState(() {
         _markers.removeWhere((marker) => marker.markerId.value == "origin");
         _markers.add(
@@ -327,11 +354,18 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
             position: _currentPosition!,
             infoWindow: const InfoWindow(title: "Current Location"),
             icon: _isNavigating
-                ? (_navArrowIcon ?? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure))
-                : BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
+                ? (_navArrowIcon ??
+                      BitmapDescriptor.defaultMarkerWithHue(
+                        BitmapDescriptor.hueAzure,
+                      ))
+                : BitmapDescriptor.defaultMarkerWithHue(
+                    BitmapDescriptor.hueGreen,
+                  ),
             flat: _isNavigating,
             rotation: _isNavigating ? _currentBearing : 0,
-            anchor: _isNavigating ? const Offset(0.5, 0.5) : const Offset(0.5, 1.0),
+            anchor: _isNavigating
+                ? const Offset(0.5, 0.5)
+                : const Offset(0.5, 1.0),
           ),
         );
       });
@@ -370,19 +404,21 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
 
   double _selectZoomForSpeed() {
     // If we have at least 2 points, estimate speed from route spacing
-    if (_routePoints.length >= 2 && _currentRouteIndex < _routePoints.length - 1) {
+    if (_routePoints.length >= 2 &&
+        _currentRouteIndex < _routePoints.length - 1) {
       final LatLng a = _routePoints[_currentRouteIndex];
       final LatLng b = _routePoints[_currentRouteIndex + 1];
       final double meters = _distanceMeters(a, b);
-      if (meters > 40) return Config.zoomFast;      // likely faster road
-      if (meters > 15) return Config.zoomMedium;    // city driving
-      return Config.zoomSlow;                        // slow/turning
+      if (meters > 40) return Config.zoomFast; // likely faster road
+      if (meters > 15) return Config.zoomMedium; // city driving
+      return Config.zoomSlow; // slow/turning
     }
     return Config.zoomMedium;
   }
 
   double _selectTiltForSpeed() {
-    if (_routePoints.length >= 2 && _currentRouteIndex < _routePoints.length - 1) {
+    if (_routePoints.length >= 2 &&
+        _currentRouteIndex < _routePoints.length - 1) {
       final LatLng a = _routePoints[_currentRouteIndex];
       final LatLng b = _routePoints[_currentRouteIndex + 1];
       final double meters = _distanceMeters(a, b);
@@ -434,8 +470,13 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
       canvas.drawPath(path, fill);
       canvas.drawPath(path, stroke);
 
-      final ui.Image img = await recorder.endRecording().toImage(size.toInt(), size.toInt());
-      final ByteData? bytes = await img.toByteData(format: ui.ImageByteFormat.png);
+      final ui.Image img = await recorder.endRecording().toImage(
+        size.toInt(),
+        size.toInt(),
+      );
+      final ByteData? bytes = await img.toByteData(
+        format: ui.ImageByteFormat.png,
+      );
       if (bytes != null) {
         _navArrowIcon = BitmapDescriptor.fromBytes(bytes.buffer.asUint8List());
       }
@@ -456,10 +497,16 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
 
   // Check if driver has reached the destination
   void _checkDestinationArrival() {
-    if (_currentPosition == null || _destination == null || _hasReachedDestination) return;
-    
-    double distanceToDestination = _distanceMeters(_currentPosition!, _destination!);
-    
+    if (_currentPosition == null ||
+        _destination == null ||
+        _hasReachedDestination)
+      return;
+
+    double distanceToDestination = _distanceMeters(
+      _currentPosition!,
+      _destination!,
+    );
+
     if (distanceToDestination <= _arrivalThreshold) {
       setState(() {
         _hasReachedDestination = true;
@@ -590,7 +637,9 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
 
   // Show route direction with real road-based navigation
   void _showRouteDirection(LatLng origin, LatLng destination) async {
-    debugPrint('Starting route calculation from ${origin.latitude},${origin.longitude} to ${destination.latitude},${destination.longitude}');
+    debugPrint(
+      'Starting route calculation from ${origin.latitude},${origin.longitude} to ${destination.latitude},${destination.longitude}',
+    );
     setState(() {
       _isCalculatingRoute = true;
     });
@@ -646,14 +695,24 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
           Marker(
             markerId: const MarkerId("origin"),
             position: origin,
-            infoWindow: const InfoWindow(title: "Current Location", snippet: "Starting Point"),
-            icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
+            infoWindow: const InfoWindow(
+              title: "Current Location",
+              snippet: "Starting Point",
+            ),
+            icon: BitmapDescriptor.defaultMarkerWithHue(
+              BitmapDescriptor.hueGreen,
+            ),
           ),
           Marker(
             markerId: const MarkerId("destination"),
             position: destination,
-            infoWindow: const InfoWindow(title: "Delivery Destination", snippet: "End Point"),
-            icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+            infoWindow: const InfoWindow(
+              title: "Delivery Destination",
+              snippet: "End Point",
+            ),
+            icon: BitmapDescriptor.defaultMarkerWithHue(
+              BitmapDescriptor.hueRed,
+            ),
           ),
         };
 
@@ -680,9 +739,13 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
   }
 
   // Get real road-based route from Google Directions API (use detailed legs/steps)
-  Future<List<LatLng>> _getRoadBasedRoute(LatLng origin, LatLng destination) async {
+  Future<List<LatLng>> _getRoadBasedRoute(
+    LatLng origin,
+    LatLng destination,
+  ) async {
     try {
-      String url = 'https://maps.googleapis.com/maps/api/directions/json?'
+      String url =
+          'https://maps.googleapis.com/maps/api/directions/json?'
           'origin=${origin.latitude},${origin.longitude}&'
           'destination=${destination.latitude},${destination.longitude}&'
           'mode=driving&'
@@ -711,9 +774,13 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
               if (poly is String && poly.isNotEmpty) {
                 final decoded = _decodePolyline(poly);
                 if (decoded.isNotEmpty) {
-                  _navSteps.add(_NavStep(points: decoded, instruction: instruction));
+                  _navSteps.add(
+                    _NavStep(points: decoded, instruction: instruction),
+                  );
                 }
-                if (points.isNotEmpty && decoded.isNotEmpty && points.last == decoded.first) {
+                if (points.isNotEmpty &&
+                    decoded.isNotEmpty &&
+                    points.last == decoded.first) {
                   points.addAll(decoded.skip(1));
                 } else {
                   points.addAll(decoded);
@@ -723,10 +790,13 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
           }
           if (points.isNotEmpty) return points;
           // fallback to overview if steps missing
-          String encodedPolyline = data['routes'][0]['overview_polyline']['points'];
+          String encodedPolyline =
+              data['routes'][0]['overview_polyline']['points'];
           return _decodePolyline(encodedPolyline);
         } else {
-          debugPrint('Directions API error: ${data['status']} - ${data['error_message'] ?? 'Unknown error'}');
+          debugPrint(
+            'Directions API error: ${data['status']} - ${data['error_message'] ?? 'Unknown error'}',
+          );
         }
       } else {
         debugPrint('HTTP error: ${response.statusCode}');
@@ -753,7 +823,9 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
       overview = await _getOsrmRoutePoints(origin, destination);
     }
     if (overview.isEmpty) {
-      debugPrint('No road-based overview available; skipping straight-line fallback');
+      debugPrint(
+        'No road-based overview available; skipping straight-line fallback',
+      );
       if (mounted) {
         setState(() {
           _isCalculatingRoute = false;
@@ -805,13 +877,19 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
       Marker(
         markerId: const MarkerId("origin"),
         position: origin,
-        infoWindow: const InfoWindow(title: "Current Location", snippet: "Starting Point"),
+        infoWindow: const InfoWindow(
+          title: "Current Location",
+          snippet: "Starting Point",
+        ),
         icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
       ),
       Marker(
         markerId: const MarkerId("destination"),
         position: destination,
-        infoWindow: const InfoWindow(title: "Delivery Destination", snippet: "End Point"),
+        infoWindow: const InfoWindow(
+          title: "Delivery Destination",
+          snippet: "End Point",
+        ),
         icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
       ),
     };
@@ -829,9 +907,13 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
   }
 
   // No-billing routing via OSRM public demo. Returns road-following points.
-  Future<List<LatLng>> _getOsrmRoutePoints(LatLng origin, LatLng destination) async {
+  Future<List<LatLng>> _getOsrmRoutePoints(
+    LatLng origin,
+    LatLng destination,
+  ) async {
     try {
-      final String url = 'https://router.project-osrm.org/route/v1/driving/'
+      final String url =
+          'https://router.project-osrm.org/route/v1/driving/'
           '${origin.longitude},${origin.latitude};'
           '${destination.longitude},${destination.latitude}'
           '?overview=full&geometries=polyline&alternatives=false&steps=false';
@@ -864,7 +946,10 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
     int closestIndex = 0;
 
     for (int i = 0; i < _routePoints.length; i++) {
-      double distance = _calculateDistanceInKm(_currentPosition!, _routePoints[i]);
+      double distance = _calculateDistanceInKm(
+        _currentPosition!,
+        _routePoints[i],
+      );
       if (distance < minDistance) {
         minDistance = distance;
         closestIndex = i;
@@ -879,7 +964,10 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
       _currentBearing = _calculateBearing(_currentPosition!, nextPoint);
       _currentDirection = _getDirectionText(_currentBearing);
       // If heading deviates a lot from route, trigger reroute
-      final double userToRouteBearing = _calculateBearing(_currentPosition!, nextPoint);
+      final double userToRouteBearing = _calculateBearing(
+        _currentPosition!,
+        nextPoint,
+      );
       final double diff = (_currentBearing - userToRouteBearing).abs();
       if (diff > Config.headingDeviationDegrees) {
         _maybeReroute();
@@ -943,11 +1031,11 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
     return "Continue straight";
   }
 
-
   // Calculate estimated travel time
   String _calculateEstimatedTime(LatLng origin, LatLng destination) {
     double distance = _calculateDistanceInKm(origin, destination);
-    int estimatedMinutes = (distance * 2.5).round(); // Rough estimate: 2.5 min per km
+    int estimatedMinutes = (distance * 2.5)
+        .round(); // Rough estimate: 2.5 min per km
     return "$estimatedMinutes min";
   }
 
@@ -964,11 +1052,15 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
     double lat1Rad = origin.latitude * (pi / 180);
     double lat2Rad = destination.latitude * (pi / 180);
     double deltaLatRad = (destination.latitude - origin.latitude) * (pi / 180);
-    double deltaLngRad = (destination.longitude - origin.longitude) * (pi / 180);
+    double deltaLngRad =
+        (destination.longitude - origin.longitude) * (pi / 180);
 
-    double a = sin(deltaLatRad / 2) * sin(deltaLatRad / 2) +
-        cos(lat1Rad) * cos(lat2Rad) *
-            sin(deltaLngRad / 2) * sin(deltaLngRad / 2);
+    double a =
+        sin(deltaLatRad / 2) * sin(deltaLatRad / 2) +
+        cos(lat1Rad) *
+            cos(lat2Rad) *
+            sin(deltaLngRad / 2) *
+            sin(deltaLngRad / 2);
     double c = 2 * asin(sqrt(a));
 
     return earthRadius * c;
@@ -983,7 +1075,8 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
     final double lat2 = b.latitude * (pi / 180);
     final double sinDLat = sin(dLat / 2);
     final double sinDLng = sin(dLng / 2);
-    final double aVal = sinDLat * sinDLat + sinDLng * sinDLng * cos(lat1) * cos(lat2);
+    final double aVal =
+        sinDLat * sinDLat + sinDLng * sinDLng * cos(lat1) * cos(lat2);
     final double c = 2 * atan2(sqrt(aVal), sqrt(1 - aVal));
     return earthRadius * c;
   }
@@ -999,7 +1092,10 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
 
     // Add extra time based on delivery items count
     int itemCount = widget.deliveryItems?.length ?? 1;
-    int extraMinutes = (itemCount * 2).clamp(0, 15); // 2 min per item, max 15 min
+    int extraMinutes = (itemCount * 2).clamp(
+      0,
+      15,
+    ); // 2 min per item, max 15 min
 
     int totalMinutes = baseMinutes + extraMinutes;
     int minTime = (totalMinutes * 0.8).round(); // 80% of calculated time
@@ -1010,7 +1106,10 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
 
   Future<void> _calculateRoute(LatLng origin, LatLng destination) async {
     try {
-      List<LatLng> polylineCoordinates = await _getRouteCoordinates(origin, destination);
+      List<LatLng> polylineCoordinates = await _getRouteCoordinates(
+        origin,
+        destination,
+      );
       if (polylineCoordinates.isNotEmpty) {
         Polyline polyline = Polyline(
           polylineId: const PolylineId("route"),
@@ -1024,13 +1123,17 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
             markerId: const MarkerId("origin"),
             position: origin,
             infoWindow: const InfoWindow(title: "Current Location"),
-            icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
+            icon: BitmapDescriptor.defaultMarkerWithHue(
+              BitmapDescriptor.hueGreen,
+            ),
           ),
           Marker(
             markerId: const MarkerId("destination"),
             position: destination,
             infoWindow: const InfoWindow(title: "Delivery Destination"),
-            icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+            icon: BitmapDescriptor.defaultMarkerWithHue(
+              BitmapDescriptor.hueRed,
+            ),
           ),
         };
 
@@ -1049,7 +1152,10 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
     }
   }
 
-  Future<List<LatLng>> _getRouteCoordinates(LatLng origin, LatLng destination) async {
+  Future<List<LatLng>> _getRouteCoordinates(
+    LatLng origin,
+    LatLng destination,
+  ) async {
     List<LatLng> polylineCoordinates = [];
     try {
       String url =
@@ -1059,7 +1165,8 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['status'] == 'OK') {
-          String encodedPolyline = data['routes'][0]['overview_polyline']['points'];
+          String encodedPolyline =
+              data['routes'][0]['overview_polyline']['points'];
           polylineCoordinates = _decodePolyline(encodedPolyline);
         }
       }
@@ -1111,11 +1218,15 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
     final double lat1 = origin.latitude * (pi / 180);
     final double lng1 = origin.longitude * (pi / 180);
 
-    final double lat2 = asin(sin(lat1) * cos(delta) + cos(lat1) * sin(delta) * cos(bearingRad));
-    final double lng2 = lng1 + atan2(
-      sin(bearingRad) * sin(delta) * cos(lat1),
-      cos(delta) - sin(lat1) * sin(lat2),
+    final double lat2 = asin(
+      sin(lat1) * cos(delta) + cos(lat1) * sin(delta) * cos(bearingRad),
     );
+    final double lng2 =
+        lng1 +
+        atan2(
+          sin(bearingRad) * sin(delta) * cos(lat1),
+          cos(delta) - sin(lat1) * sin(lat2),
+        );
 
     return LatLng(lat2 * (180 / pi), ((lng2 * (180 / pi) + 540) % 360) - 180);
   }
@@ -1145,7 +1256,9 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
       northeast: LatLng(maxLat + latPadding, maxLng + lngPadding),
     );
 
-    _mapController!.animateCamera(CameraUpdate.newLatLngBounds(bounds, 50.0)); // Reduced padding for closer view
+    _mapController!.animateCamera(
+      CameraUpdate.newLatLngBounds(bounds, 50.0),
+    ); // Reduced padding for closer view
   }
 
   void _fitCameraToRoute(List<LatLng> coordinates) {
@@ -1248,7 +1361,11 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
           tiltGesturesEnabled: true,
           rotateGesturesEnabled: true,
           padding: const EdgeInsets.only(
-              top: 80, bottom: 170, left: 6, right: 6),
+            top: 80,
+            bottom: 170,
+            left: 6,
+            right: 6,
+          ),
           onCameraMoveStarted: () {
             _userInteracting = true;
             if (_isFollowMode) {
@@ -1261,14 +1378,15 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
           markers: _isNavigating
               ? _markers
               : {
-            Marker(
-              markerId: const MarkerId("current_user"),
-              position: _currentPosition!,
-              infoWindow: const InfoWindow(title: "You are here"),
-              icon: BitmapDescriptor.defaultMarkerWithHue(
-                  BitmapDescriptor.hueAzure),
-            )
-          },
+                  Marker(
+                    markerId: const MarkerId("current_user"),
+                    position: _currentPosition!,
+                    infoWindow: const InfoWindow(title: "You are here"),
+                    icon: BitmapDescriptor.defaultMarkerWithHue(
+                      BitmapDescriptor.hueAzure,
+                    ),
+                  ),
+                },
           polylines: _polylines,
           onMapCreated: (GoogleMapController controller) {
             _mapController = controller;
@@ -1419,7 +1537,10 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
                   Transform.rotate(
                     angle: _currentBearing * (pi / 180),
                     child: const Icon(
-                        Icons.turn_slight_right, color: Colors.blue, size: 26),
+                      Icons.turn_slight_right,
+                      color: Colors.blue,
+                      size: 26,
+                    ),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
@@ -1428,15 +1549,19 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                          fontSize: 16, fontWeight: FontWeight.w600),
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                   const SizedBox(width: 8),
                   Text(
                     _calculateDistance(_currentPosition!, _destination!),
-                    style: const TextStyle(fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.blue),
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.blue,
+                    ),
                   ),
                 ],
               ),
@@ -1494,7 +1619,9 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
-                                  color: Colors.white, fontSize: 13),
+                                color: Colors.white,
+                                fontSize: 13,
+                              ),
                             ),
                           ),
                         ],
@@ -1507,15 +1634,19 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
                           Text(
                             _getEstimatedDeliveryTime(),
                             style: const TextStyle(
-                                color: Colors.white, fontSize: 13),
+                              color: Colors.white,
+                              fontSize: 13,
+                            ),
                           ),
                         ],
                       ),
                       const SizedBox(height: 10),
                       if (_isNavigating && !_hasReachedDestination) ...[
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12,
-                              vertical: 10),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
+                          ),
                           decoration: BoxDecoration(
                             color: Colors.white.withOpacity(0.2),
                             borderRadius: BorderRadius.circular(8),
@@ -1540,8 +1671,10 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
                       ],
                       if (_hasReachedDestination) ...[
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12,
-                              vertical: 10),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
+                          ),
                           decoration: BoxDecoration(
                             color: Colors.green.withOpacity(0.3),
                             borderRadius: BorderRadius.circular(8),
@@ -1566,8 +1699,10 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
                       ],
                       if (_isExternalNavigationActive) ...[
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12,
-                              vertical: 10),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
+                          ),
                           decoration: BoxDecoration(
                             color: Colors.blue.withOpacity(0.3),
                             borderRadius: BorderRadius.circular(8),
@@ -1590,7 +1725,7 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
                         ),
                         const SizedBox(height: 10),
                       ],
-                      // Replace this code in the Update button onPressed:
+
                       ElevatedButton(
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.white,
@@ -1598,19 +1733,162 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
                           foregroundColor: Colors.green,
                         ),
                         onPressed: () {
-                          // Navigate to ConfirmationPage and remove GoogleMapPage from stack
-                          Navigator.pushAndRemoveUntil(
-                            context,
-                            MaterialPageRoute(builder: (context) => ConfirmationPage(
-                              deliveryCode: widget.deliveryCode, // Pass the delivery code
-                              deliveryAddress: widget.deliveryAddress,
-                              deliveryItems: widget.deliveryItems,
-                            )),
-                                (route) => route.isFirst, // Keep only the first route (HomePage)
+                          showDialog(
+                            context: context,
+                            builder: (context) {
+                              return StatefulBuilder(
+                                builder: (context, setState) {
+                                  return AlertDialog(
+                                    title: const Text(
+                                      "Delivery Status",
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 20,
+                                      ),
+                                    ),
+                                    content: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        // Show buttons OR reason input based on flag
+                                        if (!showReasonField) ...[
+                                          Row(
+                                            children: [
+                                              // Failed Button
+                                              Expanded(
+                                                child: SizedBox(
+                                                  height: 48,
+                                                  child: ElevatedButton(
+                                                    style: ElevatedButton.styleFrom(
+                                                      backgroundColor: Colors.red,
+                                                    ),
+                                                    onPressed: () {
+                                                      setState(() {
+                                                        showReasonField = true;
+                                                      });
+                                                    },
+                                                    child: const FittedBox(
+                                                      fit: BoxFit.scaleDown,
+                                                      child: Text(
+                                                        "Failed",
+                                                        style: TextStyle(
+                                                          color: Colors.white,
+                                                          fontWeight: FontWeight.bold,
+                                                          fontSize: 12.5,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+
+                                              const SizedBox(width: 12), // spacing
+
+                                              // Confirmed Button
+                                              Expanded(
+                                                child: SizedBox(
+                                                  height: 48,
+                                                  child: ElevatedButton(
+                                                    style: ElevatedButton.styleFrom(
+                                                      backgroundColor: Colors.green,
+                                                    ),
+                                                    onPressed: () {
+                                                      Navigator.pop(context);
+                                                      Navigator.pushAndRemoveUntil(
+                                                        context,
+                                                        MaterialPageRoute(
+                                                          builder: (context) => ConfirmationPage(
+                                                            deliveryCode: widget.deliveryCode,
+                                                            deliveryAddress: widget.deliveryAddress,
+                                                            deliveryItems: widget.deliveryItems,
+                                                          ),
+                                                        ),
+                                                            (route) => route.isFirst,
+                                                      );
+                                                    },
+                                                    child: const FittedBox(
+                                                      fit: BoxFit.scaleDown,
+                                                      child: Text(
+                                                        "Confirmed",
+                                                        style: TextStyle(
+                                                          color: Colors.white,
+                                                          fontWeight: FontWeight.bold,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ],
+                                        // Reason input view
+                                        if (showReasonField) ...[
+                                          TextField(
+                                            controller: reasonController,
+                                            decoration: const InputDecoration(
+                                              labelText: "Enter reason for failure",
+                                              border: OutlineInputBorder(),
+                                            ),
+                                            keyboardType: TextInputType.multiline,
+                                            minLines: 1,
+                                            maxLines: 5,
+                                            textInputAction: TextInputAction.done,
+                                            onSubmitted: (_) => _submitReason(), // Press Enter to submit
+                                          ),
+                                          const SizedBox(height: 8),
+                                          Row(
+                                            children: [
+                                              // Back Button
+                                              Expanded(
+                                                child: ElevatedButton(
+                                                  style: ElevatedButton.styleFrom(
+                                                    backgroundColor: Colors.grey,
+                                                  ),
+                                                  onPressed: () {
+                                                    setState(() {
+                                                      showReasonField = false;
+                                                      reasonController.clear();
+                                                    });
+                                                  },
+                                                  child: const Text(
+                                                    "Back",
+                                                    style: TextStyle(
+                                                      color: Colors.white,
+                                                      fontWeight: FontWeight.bold,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                              const SizedBox(width: 12),
+                                              // Submit Button
+                                              Expanded(
+                                                child: ElevatedButton(
+                                                  style: ElevatedButton.styleFrom(
+                                                    backgroundColor: Colors.red,
+                                                  ),
+                                                  onPressed: _submitReason, // Reuse the same function
+                                                  child: const Text(
+                                                    "Submit",
+                                                    style: TextStyle(
+                                                      color: Colors.white,
+                                                      fontWeight: FontWeight.bold,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                  );
+                                },
+                              );
+                            },
                           );
                         },
-                        child: const Text("Update"),
-                      )
+                        child: const Text("Update",style: TextStyle(fontWeight: FontWeight.bold),),
+                      ),
                     ],
                   ),
                 ),
@@ -1620,6 +1898,52 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
       ],
     );
   }
+
+  void _submitReason() async {
+    final reason = reasonController.text.trim();
+
+    if (reason.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Please provide a reason for failure"),
+        ),
+      );
+      return;
+    }
+
+    try {
+      await FirebaseFirestore.instance
+          .collection('delivery')
+          .doc(widget.deliveryCode)
+          .update({
+        'status': 'Failed',
+        'reason': reason,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Delivery updated successfully"),
+        ),
+      );
+
+      // Navigate back to homepage after a short delay
+      Future.delayed(const Duration(milliseconds: 500), () {
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (context) => HomePage()),
+              (route) => false,
+        );
+      });
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Failed to update delivery: $e"),
+        ),
+      );
+    }
+  }
+
 }
 
 // App lifecycle observer to detect when user returns from external navigation

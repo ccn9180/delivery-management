@@ -12,7 +12,20 @@
           "package_name": "my.edu.tarumt.delivery"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "720193850695-s30ea16een9e1stdiiuf73n54f6ln1nr.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "my.edu.tarumt.delivery",
+            "certificate_hash": "199043a69c78fb609073f3930ea8c2eb77fe0245"
+          }
+        },
+        {
+          "client_id": "720193850695-ufa6rgkibf3k92o9stl7edg296h4n6jd.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyD01fuOOc2sGJjGZyzKWj2xuDj8Z3oCThE"
@@ -20,7 +33,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "720193850695-ufa6rgkibf3k92o9stl7edg296h4n6jd.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "720193850695-1gbjkqm6vok7pk12atrbunti75h0v6jk.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "my.edu.tarumt.delivery"
+              }
+            }
+          ]
         }
       }
     }
