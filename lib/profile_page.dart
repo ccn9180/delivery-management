@@ -140,7 +140,7 @@ class _ProfilePageState extends State<ProfilePage> {
                         onTap: () {
                           Navigator.push(
                             context,
-                            MaterialPageRoute(builder: (context) => const ChangePasswordPage()),
+                            MaterialPageRoute(builder: (context) => const GmailAuthHandler()),
                           );
                         },
                       ),

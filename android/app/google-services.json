@@ -14,11 +14,11 @@
       },
       "oauth_client": [
         {
-          "client_id": "720193850695-s30ea16een9e1stdiiuf73n54f6ln1nr.apps.googleusercontent.com",
+          "client_id": "720193850695-shk447kmh9mcrd9fq1cpj4b55rlmn707.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
             "package_name": "my.edu.tarumt.delivery",
-            "certificate_hash": "199043a69c78fb609073f3930ea8c2eb77fe0245"
+            "certificate_hash": "de0b12132eea442eebf025813364f58ec738d4fd"
           }
         },
         {
