@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:percent_indicator/circular_percent_indicator.dart';
 import 'DeliveryHistory.dart';
 import 'google_map.dart';
 
@@ -205,48 +206,64 @@ class DeliveryListPage extends StatelessWidget {
                     final delivered = deliveries.where((d) => d.status == 'Delivered').length;
                     final failed = deliveries.where((d) => d.status == 'Failed').length;
 
-                    final deliveredProgress = total == 0 ? 0.0 : delivered / total;
-                    final failedProgress = total == 0 ? 0.0 : failed / total;
+                    // Percentages
+                    final deliveredPercent = total == 0 ? 0.0 : delivered / total;
+                    final failedPercent = total == 0 ? 0.0 : failed / total;
+                    final remainingPercent = 1.0 - deliveredPercent - failedPercent;
 
                     return SizedBox(
                       width: 50,
                       height: 50,
-                      child: Stack(
-                        alignment: Alignment.center,
-                        children: [
-                        // Background circle (gray for remaining)
-                        CircularProgressIndicator(
-                          value: 1.0,
-                              strokeWidth: 6,
-                              backgroundColor: Colors.grey.shade200,
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.grey.shade200),
-                        ),
-
-                        // Failed portion
-                        CircularProgressIndicator(
-                          value: failedProgress,
-                          strokeWidth: 6,
-                          backgroundColor: Colors.transparent,
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.red),
-                        ),
-
-                        // Delivered portion (on top of failed)
-                        CircularProgressIndicator(
-                          value: deliveredProgress,
-                          strokeWidth: 6,
-                          backgroundColor: Colors.transparent,
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.green),
-                        ),
-
-                        // Center text
-                          Text(
-                          "$delivered/$total",
-                            style: const TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
+                      child: CircularPercentIndicator(
+                        radius: 20, // smaller radius
+                        lineWidth: 6,
+                        percent: 1.0, // full circle
+                        backgroundColor: Colors.grey.shade200,
+                        progressColor: Colors.transparent,
+                        circularStrokeCap: CircularStrokeCap.butt,
+                        center: Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            // Remaining (gray)
+                            CircularPercentIndicator(
+                              radius: 20,
+                              lineWidth: 6,
+                              percent: remainingPercent,
+                              backgroundColor: Colors.transparent,
+                              progressColor: Colors.grey.shade200,
+                              circularStrokeCap: CircularStrokeCap.butt,
+                              startAngle: 0,
                             ),
-                          ),
-                        ],
+                            // Failed (red)
+                            CircularPercentIndicator(
+                              radius: 20,
+                              lineWidth: 6,
+                              percent: failedPercent,
+                              backgroundColor: Colors.transparent,
+                              progressColor: Colors.red,
+                              circularStrokeCap: CircularStrokeCap.butt,
+                              startAngle: 360 * remainingPercent,
+                            ),
+                            // Delivered (green)
+                            CircularPercentIndicator(
+                              radius: 20,
+                              lineWidth: 6,
+                              percent: deliveredPercent,
+                              backgroundColor: Colors.transparent,
+                              progressColor: Colors.green,
+                              circularStrokeCap: CircularStrokeCap.butt,
+                              startAngle: 360 * (remainingPercent + failedPercent),
+                            ),
+                            // Center text
+                            Text(
+                              "$delivered/$total",
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     );
                   },

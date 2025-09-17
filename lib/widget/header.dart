@@ -22,8 +22,8 @@ class _PageHeaderState extends State<PageHeader> {
   void initState() {
     super.initState();
     _fetchEmployeeId();
-    // Refresh every 30 seconds to catch showAt changes
-    _timer = Timer.periodic(const Duration(seconds: 30), (_) {
+
+    _timer = Timer.periodic(const Duration(seconds: 5), (_) {
       if (mounted) setState(() {});
     });
   }
@@ -57,7 +57,7 @@ class _PageHeaderState extends State<PageHeader> {
     }
   }
 
-  // Returns the number of unread notifications whose showAt <= now
+  // Count unread notifications whose showAt <= now
   int _countUnread(List<QueryDocumentSnapshot> docs) {
     final now = DateTime.now();
     return docs.where((doc) {
@@ -66,6 +66,15 @@ class _PageHeaderState extends State<PageHeader> {
       final showAt = (data['showAt'] as Timestamp?)?.toDate();
       return !isRead && (showAt == null || !showAt.isAfter(now));
     }).length;
+  }
+
+  // Stream getter to evaluate Timestamp.now() each time
+  Stream<QuerySnapshot> get _notificationStream {
+    if (employeeId == null) return const Stream.empty();
+    return FirebaseFirestore.instance
+        .collection("notifications")
+        .where("employeeID", isEqualTo: employeeId)
+        .snapshots();
   }
 
   @override
@@ -100,10 +109,7 @@ class _PageHeaderState extends State<PageHeader> {
                 )
               else
                 StreamBuilder<QuerySnapshot>(
-                  stream: FirebaseFirestore.instance
-                      .collection("notifications")
-                      .where("employeeID", isEqualTo: employeeId)
-                      .snapshots(),
+                  stream: _notificationStream,
                   builder: (context, snapshot) {
                     final unreadCount = snapshot.hasData
                         ? _countUnread(snapshot.data!.docs)
