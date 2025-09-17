@@ -75,7 +75,7 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
   bool _isFollowMode = true; // camera follows heading like turn-by-turn
   bool _userInteracting = false;
   BitmapDescriptor? _navArrowIcon;
-  
+
   // Enhanced navigation state management
   bool _hasReachedDestination = false;
   bool _isExternalNavigationActive = false;
@@ -102,7 +102,7 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initializeLocationAndMap();
     });
-    
+
     // Listen for app lifecycle changes to detect return from external navigation
     _lifecycleObserver = _AppLifecycleObserver(
       onResume: () {
@@ -275,11 +275,11 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
     if (_destination == null) return;
     final LatLng dest = _destination!;
     final LatLng origin = _currentPosition ?? dest;
-    
+
     // Create deep link URL for Google Maps navigation
     final Uri uri = Uri.parse(
         'https://www.google.com/maps/dir/?api=1&origin=${origin.latitude},${origin.longitude}&destination=${dest.latitude},${dest.longitude}&travelmode=driving&dir_action=navigate');
-    
+
     if (await canLaunchUrl(uri)) {
       setState(() {
         _isExternalNavigationActive = true;
@@ -318,7 +318,7 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
     if (mounted && _mapController != null && _currentPosition != null) {
       // Check if driver has reached destination
       _checkDestinationArrival();
-      
+
       setState(() {
         _markers.removeWhere((marker) => marker.markerId.value == "origin");
         _markers.add(
@@ -457,16 +457,16 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
   // Check if driver has reached the destination
   void _checkDestinationArrival() {
     if (_currentPosition == null || _destination == null || _hasReachedDestination) return;
-    
+
     double distanceToDestination = _distanceMeters(_currentPosition!, _destination!);
-    
+
     if (distanceToDestination <= _arrivalThreshold) {
       setState(() {
         _hasReachedDestination = true;
         _isNavigating = false;
         _showDeliveryInfoCard = false; // Hide delivery info card when arrived
       });
-      
+
       // Show arrival confirmation
       _showArrivalConfirmation();
     }
@@ -1574,21 +1574,29 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
                         ),
                         const SizedBox(height: 10),
                       ],
+
                       ElevatedButton(
                         style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.white,
-                            minimumSize: const Size.fromHeight(36),
-                            foregroundColor: Colors.green),
+                          backgroundColor: Colors.white,
+                          minimumSize: const Size.fromHeight(36),
+                          foregroundColor: Colors.green,
+                        ),
                         onPressed: () {
-                          Navigator.push(
+                          // Navigate to ConfirmationPage and remove GoogleMapPage from stack
+                          Navigator.pushAndRemoveUntil(
                             context,
-                            MaterialPageRoute(
-                                builder: (context) => const ConfirmationPage()),
+                            MaterialPageRoute(builder: (context) => ConfirmationPage(
+                              deliveryCode: widget.deliveryCode, // Pass the delivery code
+                              deliveryAddress: widget.deliveryAddress,
+                              deliveryItems: widget.deliveryItems,
+                            )),
+                                (route) => route.isFirst, // Keep only the first route (HomePage)
                           );
                         },
                         child: const Text("Update", style: TextStyle(
                             fontSize: 14, fontWeight: FontWeight.bold)),
                       )
+
                     ],
                   ),
                 ),
