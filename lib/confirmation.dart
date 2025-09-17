@@ -101,7 +101,6 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
   File? _imageFile;
   final ImagePicker _picker = ImagePicker();
 
-  // ✅ Added: Timer + confirmedAt
   DateTime _currentTime = DateTime.now();
   DateTime? _confirmedAt;
   Timer? _timer;
@@ -505,7 +504,7 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
           .doc(docIdToUpdate)
           .update({
         'status': 'Delivered',
-        'deliveredAt': now, // ✅ stores phone's current date+time
+        'deliveredAt': now,
         'deliveryProof': proofUrl,
         'confirmedBy': deliveryPersonnel?.name ?? 'Unknown',
       });
