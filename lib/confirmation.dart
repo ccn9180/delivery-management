@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:convert';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:delivery/profile.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -10,6 +11,7 @@ import 'package:intl/intl.dart';
 import 'package:file_picker/file_picker.dart';
 import 'firebase_options.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'google_map.dart';
 
 class ConfirmationPage extends StatefulWidget {
   final String? deliveryCode;
@@ -402,6 +404,7 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
     final imageUrl = 'data:image/jpeg;base64,$base64Image';
 
     final now = DateTime.now();
+
     setState(() {
       _confirmedAt = now;
     });
@@ -413,9 +416,10 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
           .doc(docIdToUpdate)
           .update({
         'status': 'Delivered',
-        'deliveredAt': now,
-        'deliveryProof': imageUrl, // Store as base64 URL
+        'deliveredAt': Timestamp.fromDate(now), // ✅ store as Firestore Timestamp
+        'deliveryProof': imageUrl,
       });
+
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -425,7 +429,6 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
         ),
       );
 
-      // Wait a moment before navigating back
       await Future.delayed(const Duration(seconds: 2));
 
       if (mounted) Navigator.pop(context);
@@ -439,6 +442,7 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
       );
     }
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -467,6 +471,8 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
+        toolbarHeight: 110, // your custom height
+        centerTitle: true,
         title: const Text(
           'Delivery Confirmation',
           style: TextStyle(
@@ -475,18 +481,67 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
             fontSize: 22,
           ),
         ),
-        centerTitle: true,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.black),
-          onPressed: () => Navigator.pop(context),
+          onPressed: () {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                builder: (context) => GoogleMapPage(
+                  deliveryCode: widget.deliveryCode,
+                  deliveryAddress: widget.deliveryAddress,
+                  deliveryLocation: widget.deliveryLocation,
+                  deliveryStatus: deliveryStatus,
+                  deliveryItems: widget.deliveryItems,
+                ),
+              ),
+            );
+          },
         ),
+        actions: [
+          // Wrap in Column and align to top
+          Column(
+            mainAxisAlignment: MainAxisAlignment.start, // push to top
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(right: 16.0, top: 30.0), // small top padding
+                child: GestureDetector(
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const Profile()),
+                    );
+                  },
+                  child: Container(
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.white,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black12,
+                          blurRadius: 4,
+                          offset: Offset(2, 2),
+                        ),
+                      ],
+                    ),
+                    padding: const EdgeInsets.all(8.0),
+                    child: const Icon(
+                      Icons.person,
+                      color: Color(0xFF1B6D07),
+                      size: 30,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const SizedBox(height: 15),
             Text(
               'Date: $currentDate',
               style: const TextStyle(
@@ -527,40 +582,31 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
                 4: FlexColumnWidth(1.5),
               },
               children: [
-                const TableRow(
+                TableRow(
                   children: [
-                    Padding(
-                        padding: EdgeInsets.all(8),
+                    for (var header in [
+                      'Item(s) Delivered',
+                      'Quantity',
+                      'Tracking Number',
+                      'Delivery Date',
+                      'Delivery Time'
+                    ])
+                      Padding(
+                        padding: const EdgeInsets.all(8.0),
                         child: Center(
-                          child: Text('Item(s) Delivered',
-                              style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
-                        )),
-                    Padding(
-                        padding: EdgeInsets.all(8),
-                        child: Center(
-                          child: Text('Quantity',
-                              style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
-                        )),
-                    Padding(
-                        padding: EdgeInsets.all(8),
-                        child: Center(
-                          child: Text('Tracking Number',
-                              style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
-                        )),
-                    Padding(
-                        padding: EdgeInsets.all(8),
-                        child: Center(
-                          child: Text('Delivery Date',
-                              style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
-                        )),
-                    Padding(
-                        padding: EdgeInsets.all(8),
-                        child: Center(
-                          child: Text('Delivery Time',
-                              style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
-                        )),
+                          child: Text(
+                            header,
+                            textAlign: TextAlign.center, // center horizontally
+                            style: const TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
                   ],
                 ),
+
                 ...deliveryItems.map((item) {
                   return TableRow(
                     children: [
@@ -702,17 +748,28 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
+                // Cancel button
                 ElevatedButton(
-                  onPressed: () => Navigator.pop(context),
+                  onPressed: () {
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => GoogleMapPage(
+                          deliveryCode: widget.deliveryCode,
+                          deliveryAddress: widget.deliveryAddress,
+                          deliveryLocation: widget.deliveryLocation,
+                          deliveryStatus: deliveryStatus,
+                          deliveryItems: widget.deliveryItems,
+                        ),
+                      ),
+                    );
+                  },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFFD7D7D7),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(5),
                     ),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 37,
-                      vertical: 10,
-                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 37, vertical: 10),
                   ),
                   child: const Text(
                     'Cancel',
