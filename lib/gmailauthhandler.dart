@@ -1,6 +1,7 @@
-import 'package:delivery/gmailauthservice.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'changepassword.dart'; // Adjust path based on your folder structure
+import 'package:google_sign_in/google_sign_in.dart';
+import 'changepassword.dart';
 
 class GmailAuthHandler extends StatefulWidget {
   const GmailAuthHandler({super.key});
@@ -10,7 +11,6 @@ class GmailAuthHandler extends StatefulWidget {
 }
 
 class _GmailAuthHandlerState extends State<GmailAuthHandler> {
-  final GmailAuthService _authService = GmailAuthService();
   bool _isLoading = true;
 
   @override
@@ -21,16 +21,49 @@ class _GmailAuthHandlerState extends State<GmailAuthHandler> {
   }
 
   Future<void> _startAuthentication() async {
-    final bool isAuthenticated = await _authService.authenticateWithGmail();
+    try {
+      final User? user = FirebaseAuth.instance.currentUser;
+      if (user == null || user.email == null) {
+        Navigator.pop(context);
+        return;
+      }
 
-    if (isAuthenticated) {
-      // Authentication successful, navigate to change password page
+      final GoogleSignIn googleSignIn = GoogleSignIn();
+      await googleSignIn.signOut(); // Force account picker
+
+      final GoogleSignInAccount? account = await googleSignIn.signIn();
+      if (account == null) {
+        Navigator.pop(context);
+        return;
+      }
+
+      // Check email match
+      if (account.email.toLowerCase() != user.email!.toLowerCase()) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Selected Google account does not match your signed-in email.')),
+        );
+        Navigator.pop(context);
+        return;
+      }
+
+      // Reauthenticate with Firebase
+      final GoogleSignInAuthentication auth = await account.authentication;
+      final OAuthCredential credential = GoogleAuthProvider.credential(
+        idToken: auth.idToken,
+        accessToken: auth.accessToken,
+      );
+      await user.reauthenticateWithCredential(credential);
+
+      if (!mounted) return;
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (context) => const ChangePasswordPage()),
       );
-    } else {
-      // Authentication failed, go back to previous screen
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Re-authentication failed: $e')),
+      );
       Navigator.pop(context);
     }
   }
@@ -45,10 +78,7 @@ class _GmailAuthHandlerState extends State<GmailAuthHandler> {
           children: [
             const CircularProgressIndicator(),
             const SizedBox(height: 20),
-            Text(
-              _isLoading ? 'Redirecting to Gmail...' : 'Authentication completed',
-              style: const TextStyle(fontSize: 16),
-            ),
+            const Text('Re-authenticating with Google...', style: TextStyle(fontSize: 16)),
           ],
         ),
       ),
