@@ -2,6 +2,7 @@ import 'dart:async' show Timer;
 import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:delivery/profile.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -9,6 +10,8 @@ import 'package:intl/intl.dart';
 import 'package:file_picker/file_picker.dart';
 import 'firebase_options.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'google_map.dart';
+import 'dart:convert';
 
 class ConfirmationPage extends StatefulWidget {
   final String? deliveryCode;
@@ -120,7 +123,7 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
     super.initState();
     _loadData();
 
-    // ✅ Start timer to update time every second
+    // Start timer to update time every second
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (!mounted) {
         timer.cancel();
@@ -378,13 +381,15 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
   }
 
   Future<void> _handleConfirmation() async {
-    if (_imageFile == null) {
+    if (_imageFile == null || !_imageFile!.existsSync()) {
+      debugPrint('❌ No image file selected or file does not exist.');
       _showImageRequiredError();
       return;
     }
 
     final docIdToUpdate = _deliveryDocId ?? widget.deliveryCode;
     if (docIdToUpdate == null || docIdToUpdate.isEmpty) {
+      debugPrint('❌ Invalid delivery reference: $docIdToUpdate');
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Invalid delivery reference'),
@@ -394,138 +399,63 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
       return;
     }
 
-    // Check if file exists
-    if (!_imageFile!.existsSync()) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Selected image file does not exist'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
-
-    String? proofUrl;
-    bool uploadSuccess = false;
-
     try {
       // Show loading indicator
       showDialog(
         context: context,
         barrierDismissible: false,
-        builder: (BuildContext context) {
-          return const AlertDialog(
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                CircularProgressIndicator(),
-                SizedBox(height: 16),
-                Text('Uploading proof of delivery...'),
-              ],
-            ),
-          );
-        },
-      );
-
-      // ✅ Make unique filename per delivery + timestamp
-      final fileName = 'deliveryProofs/${docIdToUpdate}_${DateTime.now().millisecondsSinceEpoch}.jpg';
-      final ref = FirebaseStorage.instance.ref().child(fileName);
-
-      // ✅ Upload with metadata
-      final uploadTask = ref.putFile(
-        _imageFile!,
-        SettableMetadata(
-          contentType: 'image/jpeg',
-          customMetadata: {
-            'uploadedBy': deliveryPersonnel?.name ?? 'Unknown',
-            'deliveryCode': widget.deliveryCode ?? 'Unknown',
-            'uploadedAt': DateTime.now().toIso8601String(),
-          },
+        builder: (_) => const AlertDialog(
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
+              Text('Uploading proof of delivery...'),
+            ],
+          ),
         ),
       );
 
-      // Listen for state changes and errors
-      uploadTask.snapshotEvents.listen((taskSnapshot) {
-        debugPrint('Upload state: ${taskSnapshot.state}');
-        debugPrint('Bytes transferred: ${taskSnapshot.bytesTransferred} of ${taskSnapshot.totalBytes}');
-      }, onError: (e) {
-        debugPrint('Upload error: $e');
-      });
+      // Convert image file to Base64
+      final bytes = await _imageFile!.readAsBytes();
+      final proofBase64 = base64Encode(bytes);
+      debugPrint('✅ Image converted to Base64, length: ${proofBase64.length}');
 
-      // Wait for upload to complete
-      await uploadTask.whenComplete(() {});
+      if (Navigator.of(context).canPop()) Navigator.of(context).pop(); // close loading dialog
 
-      // ✅ Get download URL after upload success
-      proofUrl = await ref.getDownloadURL();
-      uploadSuccess = true;
-      debugPrint('Upload successful. Download URL: $proofUrl');
+      // Update Firestore directly with Base64
+      final now = DateTime.now();
+      setState(() => _confirmedAt = now);
+      _timer?.cancel();
 
-    } catch (e) {
-      debugPrint("Error uploading proof: $e");
-      // Close loading dialog
-      if (Navigator.of(context).canPop()) {
-        Navigator.of(context).pop();
-      }
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("Upload failed: ${e.toString()}"),
-          backgroundColor: Colors.red,
-          duration: const Duration(seconds: 5),
-        ),
-      );
-      return;
-    }
-
-    // Close loading dialog
-    if (Navigator.of(context).canPop()) {
-      Navigator.of(context).pop();
-    }
-
-    if (!uploadSuccess || proofUrl == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Upload failed. Please try again.'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
-
-    final now = DateTime.now();
-    setState(() {
-      _confirmedAt = now;
-    });
-    _timer?.cancel();
-
-    try {
       await FirebaseFirestore.instance
           .collection('delivery')
           .doc(docIdToUpdate)
           .update({
         'status': 'Delivered',
-        'deliveredAt': now,
-        'deliveryProof': proofUrl,
-        'confirmedBy': deliveryPersonnel?.name ?? 'Unknown',
+        'deliveredAt': Timestamp.fromDate(now),
+        'deliveryProof': proofBase64, // store image as Base64 string
       });
+
+      debugPrint('✅ Firestore updated successfully with Base64 image.');
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text("Delivery confirmed!"),
+          content: Text('Delivery confirmed!'),
           backgroundColor: Colors.green,
           duration: Duration(seconds: 2),
         ),
       );
 
-      // Wait a moment before navigating back
       await Future.delayed(const Duration(seconds: 2));
-
       if (mounted) Navigator.pop(context);
+
     } catch (e) {
-      debugPrint("Firestore update failed: $e");
+      if (Navigator.of(context).canPop()) Navigator.of(context).pop(); // close loading dialog
+      debugPrint('❌ Firestore error: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text("Failed to save proof: $e"),
+          content: Text('Upload failed: $e'),
           backgroundColor: Colors.red,
         ),
       );
@@ -559,6 +489,8 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
+        toolbarHeight: 110,
+        centerTitle: true,
         title: const Text(
           'Delivery Confirmation',
           style: TextStyle(
@@ -567,18 +499,66 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
             fontSize: 22,
           ),
         ),
-        centerTitle: true,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.black),
-          onPressed: () => Navigator.pop(context),
+          onPressed: () {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                builder: (context) => GoogleMapPage(
+                  deliveryCode: widget.deliveryCode,
+                  deliveryAddress: widget.deliveryAddress,
+                  deliveryLocation: widget.deliveryLocation,
+                  deliveryStatus: deliveryStatus,
+                  deliveryItems: widget.deliveryItems,
+                ),
+              ),
+            );
+          },
         ),
+        actions: [
+          Column(
+            mainAxisAlignment: MainAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(right: 16.0, top: 30.0), // small top padding
+                child: GestureDetector(
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const Profile()),
+                    );
+                  },
+                  child: Container(
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.white,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black12,
+                          blurRadius: 4,
+                          offset: Offset(2, 2),
+                        ),
+                      ],
+                    ),
+                    padding: const EdgeInsets.all(8.0),
+                    child: const Icon(
+                      Icons.person,
+                      color: Color(0xFF1B6D07),
+                      size: 30,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const SizedBox(height: 15),
             Text(
               'Date: $currentDate',
               style: const TextStyle(
@@ -606,7 +586,6 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
             ),
             const SizedBox(height: 50),
 
-            /// Items Table - Using phone local time
             Table(
               border: TableBorder.symmetric(
                 inside: BorderSide(color: Colors.grey.shade300),
@@ -619,40 +598,31 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
                 4: FlexColumnWidth(1.5),
               },
               children: [
-                const TableRow(
+                TableRow(
                   children: [
-                    Padding(
-                        padding: EdgeInsets.all(8),
+                    for (var header in [
+                      'Item(s) Delivered',
+                      'Quantity',
+                      'Tracking Number',
+                      'Delivery Date',
+                      'Delivery Time'
+                    ])
+                      Padding(
+                        padding: const EdgeInsets.all(8.0),
                         child: Center(
-                          child: Text('Item(s) Delivered',
-                              style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
-                        )),
-                    Padding(
-                        padding: EdgeInsets.all(8),
-                        child: Center(
-                          child: Text('Quantity',
-                              style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
-                        )),
-                    Padding(
-                        padding: EdgeInsets.all(8),
-                        child: Center(
-                          child: Text('Tracking Number',
-                              style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
-                        )),
-                    Padding(
-                        padding: EdgeInsets.all(8),
-                        child: Center(
-                          child: Text('Delivery Date',
-                              style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
-                        )),
-                    Padding(
-                        padding: EdgeInsets.all(8),
-                        child: Center(
-                          child: Text('Delivery Time',
-                              style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
-                        )),
+                          child: Text(
+                            header,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
                   ],
                 ),
+
                 ...deliveryItems.map((item) {
                   return TableRow(
                     children: [
@@ -694,7 +664,6 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
 
             const SizedBox(height: 50),
 
-            /// Confirmation Summary
             const Text(
               'Confirmation Summary',
               style: TextStyle(
@@ -790,21 +759,31 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
 
             const SizedBox(height: 100),
 
-            /// Buttons
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
+                // Cancel button
                 ElevatedButton(
-                  onPressed: () => Navigator.pop(context),
+                  onPressed: () {
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => GoogleMapPage(
+                          deliveryCode: widget.deliveryCode,
+                          deliveryAddress: widget.deliveryAddress,
+                          deliveryLocation: widget.deliveryLocation,
+                          deliveryStatus: deliveryStatus,
+                          deliveryItems: widget.deliveryItems,
+                        ),
+                      ),
+                    );
+                  },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFFD7D7D7),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(5),
                     ),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 37,
-                      vertical: 10,
-                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 37, vertical: 10),
                   ),
                   child: const Text(
                     'Cancel',
@@ -840,7 +819,7 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
     );
   }
 
-  /// Loading & Error Screens
+  // Loading & Error Screens
   Widget _loadingScreen() => Scaffold(
     appBar: AppBar(
       backgroundColor: Colors.white,
