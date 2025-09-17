@@ -1,5 +1,6 @@
 import 'dart:async' show Timer;
 import 'dart:io';
+import 'dart:convert';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -395,103 +396,10 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
       return;
     }
 
-    // Check if file exists
-    if (!_imageFile!.existsSync()) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Selected image file does not exist'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
-
-    String? proofUrl;
-    bool uploadSuccess = false;
-
-    try {
-      // Show loading indicator
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (BuildContext context) {
-          return const AlertDialog(
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                CircularProgressIndicator(),
-                SizedBox(height: 16),
-                Text('Uploading proof of delivery...'),
-              ],
-            ),
-          );
-        },
-      );
-
-      // ✅ Make unique filename per delivery + timestamp
-      final fileName = 'deliveryProofs/${docIdToUpdate}_${DateTime.now().millisecondsSinceEpoch}.jpg';
-      final ref = FirebaseStorage.instance.ref().child(fileName);
-
-      // ✅ Upload with metadata
-      final uploadTask = ref.putFile(
-        _imageFile!,
-        SettableMetadata(
-          contentType: 'image/jpeg',
-          customMetadata: {
-            'uploadedBy': deliveryPersonnel?.name ?? 'Unknown',
-            'deliveryCode': widget.deliveryCode ?? 'Unknown',
-            'uploadedAt': DateTime.now().toIso8601String(),
-          },
-        ),
-      );
-
-      // Listen for state changes and errors
-      uploadTask.snapshotEvents.listen((taskSnapshot) {
-        debugPrint('Upload state: ${taskSnapshot.state}');
-        debugPrint('Bytes transferred: ${taskSnapshot.bytesTransferred} of ${taskSnapshot.totalBytes}');
-      }, onError: (e) {
-        debugPrint('Upload error: $e');
-      });
-
-      // Wait for upload to complete
-      await uploadTask.whenComplete(() {});
-
-      // ✅ Get download URL after upload success
-      proofUrl = await ref.getDownloadURL();
-      uploadSuccess = true;
-      debugPrint('Upload successful. Download URL: $proofUrl');
-
-    } catch (e) {
-      debugPrint("Error uploading proof: $e");
-      // Close loading dialog
-      if (Navigator.of(context).canPop()) {
-        Navigator.of(context).pop();
-      }
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("Upload failed: ${e.toString()}"),
-          backgroundColor: Colors.red,
-          duration: const Duration(seconds: 5),
-        ),
-      );
-      return;
-    }
-
-    // Close loading dialog
-    if (Navigator.of(context).canPop()) {
-      Navigator.of(context).pop();
-    }
-
-    if (!uploadSuccess || proofUrl == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Upload failed. Please try again.'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
+    // Convert image to base64 and store as URL
+    final bytes = await _imageFile!.readAsBytes();
+    final base64Image = base64Encode(bytes);
+    final imageUrl = 'data:image/jpeg;base64,$base64Image';
 
     final now = DateTime.now();
     setState(() {
@@ -505,9 +413,8 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
           .doc(docIdToUpdate)
           .update({
         'status': 'Delivered',
-        'deliveredAt': now, // ✅ stores phone's current date+time
-        'deliveryProof': proofUrl,
-        'confirmedBy': deliveryPersonnel?.name ?? 'Unknown',
+        'deliveredAt': now,
+        'deliveryProof': imageUrl, // Store as base64 URL
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -526,7 +433,7 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
       debugPrint("Firestore update failed: $e");
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text("Failed to save proof: $e"),
+          content: Text("Failed to save delivery: $e"),
           backgroundColor: Colors.red,
         ),
       );
