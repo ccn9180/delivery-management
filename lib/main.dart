@@ -51,7 +51,7 @@ class MyApp extends StatelessWidget {
         if (snapshot.connectionState == ConnectionState.done) {
           return MaterialApp(
             debugShowCheckedModeBanner: false,
-            title: 'SWPS',
+            title: 'SPMS',
             theme: ThemeData(primarySwatch: Colors.green),
             home: const Wrapper(),
           );
