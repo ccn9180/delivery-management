@@ -46,7 +46,7 @@ class _ProfileState extends State<Profile> {
         setState(() {
           _displayName = data['name'] as String?;
           _profileImageUrl =
-          (data['profileImage'] as String?)?.isNotEmpty == true
+              (data['profileImage'] as String?)?.isNotEmpty == true
               ? data['profileImage']
               : null;
           _employeeID = data['employeeID'] ?? 'Not set';
@@ -89,17 +89,17 @@ class _ProfileState extends State<Profile> {
             .collection('users')
             .doc(user!.uid)
             .set({
-          "profileImage": imageToSave,
-          "name": _displayName ?? user!.displayName ?? "User Name",
-          "employeeID": _employeeID,
-        }, SetOptions(merge: true));
+              "profileImage": imageToSave,
+              "name": _displayName ?? user!.displayName ?? "User Name",
+              "employeeID": _employeeID,
+            }, SetOptions(merge: true));
 
         setState(() => _profileImageUrl = imageToSave);
         widget.onImageChanged?.call(imageToSave);
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Profile image updated!")),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text("Profile image updated!")));
       } catch (e) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text("Error updating profile image: $e")),
@@ -111,9 +111,7 @@ class _ProfileState extends State<Profile> {
   @override
   Widget build(BuildContext context) {
     if (_displayName == null) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
     return Scaffold(
@@ -139,79 +137,91 @@ class _ProfileState extends State<Profile> {
           ),
         ),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox(height: 30),
-
-            // Avatar with outline and edit icon
-            Center(
-              child: GestureDetector(
-                onTap: _pickAndUploadImage,
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    double avatarSize = MediaQuery.of(context).size.width * 0.4; // 40% of screen width
-                    return Stack(
-                      alignment: Alignment.bottomRight,
-                      children: [
-                        Container(
-                          width: avatarSize,
-                          height: avatarSize,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            border: Border.all(color: Colors.grey.shade300, width: 2),
-                          ),
-                          child: ClipOval(
-                            child: profileImageProvider != null
-                                ? Image(
-                              image: profileImageProvider!,
-                              fit: BoxFit.cover,
+      body: SafeArea(
+        child: Container(
+          color: Colors.white, // ensures no grey appears behind AppBar when scrolling
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Avatar with outline and edit icon
+                Center(
+                  child: GestureDetector(
+                    onTap: _pickAndUploadImage,
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        double avatarSize = MediaQuery.of(context).size.width * 0.4;
+                        return Stack(
+                          alignment: Alignment.bottomRight,
+                          children: [
+                            Container(
                               width: avatarSize,
                               height: avatarSize,
-                            )
-                                : Container(
-                              color: Colors.white,
-                              alignment: Alignment.center,
-                              child: Icon(
-                                Icons.person,
-                                size: avatarSize * 0.6,
-                                color: Color(0xFF1B6C07),
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: Colors.grey.shade300,
+                                  width: 2,
+                                ),
+                              ),
+                              child: ClipOval(
+                                child: profileImageProvider != null
+                                    ? Image(
+                                  image: profileImageProvider!,
+                                  fit: BoxFit.cover,
+                                  width: avatarSize,
+                                  height: avatarSize,
+                                )
+                                    : Container(
+                                  color: Colors.white,
+                                  alignment: Alignment.center,
+                                  child: Icon(
+                                    Icons.person,
+                                    size: avatarSize * 0.6,
+                                    color: const Color(0xFF1B6C07),
+                                  ),
+                                ),
                               ),
                             ),
-                          ),
-                        ),
-                        // Edit icon
-                        Positioned(
-                          bottom: 0,
-                          right: 0,
-                          child: Container(
-                            padding: const EdgeInsets.all(6),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              shape: BoxShape.circle,
-                              border: Border.all(color: Colors.grey.shade300, width: 2),
+                            // Edit icon
+                            Positioned(
+                              bottom: 0,
+                              right: 0,
+                              child: Container(
+                                padding: const EdgeInsets.all(6),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: Colors.grey.shade300,
+                                    width: 2,
+                                  ),
+                                ),
+                                child: const Icon(
+                                  Icons.edit,
+                                  size: 20,
+                                  color: Colors.green,
+                                ),
+                              ),
                             ),
-                            child: const Icon(Icons.edit, size: 20, color: Colors.green),
-                          ),
-                        ),
-                      ],
-                    );
-                  },
+                          ],
+                        );
+                      },
+                    ),
+                  ),
                 ),
-              ),
+
+                SizedBox(height: MediaQuery.of(context).size.height * 0.03),
+
+                // Info cards
+                _buildInfoCard(Icons.person, "Name", _displayName ?? "User Name"),
+                _buildInfoCard(Icons.badge, "Employee ID", _employeeID ?? "Not set"),
+                _buildInfoCard(Icons.phone, "Phone Number", _phoneNum ?? "Not set"),
+                _buildInfoCard(Icons.local_shipping, "Total Deliveries", _deliveredCount ?? 0),
+              ],
             ),
-
-
-            SizedBox(height: MediaQuery.of(context).size.height * 0.03),
-
-            // Info cards
-            _buildInfoCard(Icons.person, "Name", _displayName ?? "User Name"),
-            _buildInfoCard(Icons.badge, "Employee ID", _employeeID ?? "Not set"),
-            _buildInfoCard(Icons.phone, "Phone Number", _phoneNum ?? "Not set"),
-            _buildInfoCard(Icons.local_shipping, "Total Deliveries", _deliveredCount?? 0),
-          ],
+          ),
         ),
       ),
     );
@@ -232,5 +242,4 @@ class _ProfileState extends State<Profile> {
       ),
     );
   }
-  }
-
+}
