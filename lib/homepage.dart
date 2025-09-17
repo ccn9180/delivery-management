@@ -700,7 +700,6 @@ class DeliveryDetailsPopUp extends StatelessWidget {
                       ),
                       const SizedBox(height: 8),
 
-                      // Horizontal items
                       SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
                         child: Row(
