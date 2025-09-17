@@ -15,6 +15,7 @@ class Delivery {
   final String status;
   final List<Map<String, dynamic>> items;
   final String? reason;
+  final String? deliveryProof;
 
   Delivery({
     required this.code,
@@ -23,6 +24,7 @@ class Delivery {
     required this.status,
     required this.items,
     this.reason,
+    this.deliveryProof,
   });
 
   factory Delivery.fromDoc(DocumentSnapshot doc) {
@@ -34,6 +36,7 @@ class Delivery {
       status: data['status'] ?? 'New Order',
       items: List<Map<String, dynamic>>.from(data['deliveryItems'] ?? []),
       reason: data['reason'],
+      deliveryProof: data['deliveryProof'],
     );
   }
 }
@@ -697,7 +700,6 @@ class DeliveryDetailsPopUp extends StatelessWidget {
                       ),
                       const SizedBox(height: 8),
 
-                      // Horizontal items
                       SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
                         child: Row(
@@ -946,22 +948,80 @@ class DeliveryDetailsPopUp extends StatelessWidget {
                         Expanded(
                           child: ElevatedButton(
                             onPressed: () {
-                              // Open delivered confirmation details
                               showDialog(
                                 context: context,
-                                builder: (context) => AlertDialog(
-                                  title: const Text(
-                                    "Delivery Confirmation",
-                                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
-                                  ),
-                                  content: Text("View delivered confirmation details here."),
-                                  actions: [
-                                    TextButton(
-                                      onPressed: () => Navigator.of(context).pop(),
-                                      child: const Text("Close"),
+                                builder: (context) {
+                                  return AlertDialog(
+                                    title: const Text(
+                                      "Delivery Confirmation",
+                                      style: TextStyle(
+                                          fontWeight: FontWeight.bold, fontSize: 20),
                                     ),
-                                  ],
-                                ),
+                                    content: SingleChildScrollView(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text("Delivery Code: #${delivery.code}"),
+                                          const SizedBox(height: 8),
+                                          Text(
+                                            "Delivered On: ${DateFormat('dd/MM/yyyy hh:mm a').format(delivery.date)}",
+                                          ),
+                                          const SizedBox(height: 12),
+                                          Text(
+                                            "Items Delivered:",
+                                            style: const TextStyle(
+                                                fontWeight: FontWeight.bold),
+                                          ),
+                                          const SizedBox(height: 6),
+                                          Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: delivery.items.map((item) {
+                                              final cached = _itemCache[item['itemID']];
+                                              final name = cached?['itemName'] ?? 'Unknown';
+                                              final qty = item['quantity'] ?? 0;
+                                              return Text("- $name x$qty");
+                                            }).toList(),
+                                          ),
+                                          const SizedBox(height: 12),
+                                          if (delivery.deliveryProof != null &&
+                                              delivery.deliveryProof!.isNotEmpty) ...[
+                                            const SizedBox(height: 12),
+                                            Text(
+                                              "Delivery Proof:",
+                                              style: TextStyle(
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 14),
+                                            ),
+                                            const SizedBox(height: 6),
+
+                                            Image.network(
+                                              delivery.deliveryProof!,
+                                              width: double.infinity,
+                                              height: 200,
+                                              fit: BoxFit.cover,
+                                              errorBuilder: (_, __, ___) => Container(
+                                                width: double.infinity,
+                                                height: 200,
+                                                color: Colors.grey.shade200,
+                                                child: const Center(
+                                                  child: Text("Failed to load image"),
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                          if (delivery.reason != null)
+                                            Text("Notes: ${delivery.reason}"),
+                                        ],
+                                      ),
+                                    ),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () => Navigator.of(context).pop(),
+                                        child: const Text("Close"),
+                                      ),
+                                    ],
+                                  );
+                                },
                               );
                             },
                             style: ElevatedButton.styleFrom(
