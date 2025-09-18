@@ -96,8 +96,8 @@ class _LoginPageState extends State<LoginPage> {
       );
     } on FirebaseAuthException catch (e) {
       String message = 'Something went wrong. Try again.';
-      if (e.code == 'user-not-found') {
-        message = 'No user found for that email.';
+      if (e.code == 'invalid-email') {
+        message = 'Invalid email. Please try again!';
       }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(message)),
