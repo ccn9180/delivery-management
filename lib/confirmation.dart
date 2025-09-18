@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:delivery/profile.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
@@ -229,17 +230,63 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
 
         deliveryStatus = deliveryData!['status']?.toString() ?? 'Unknown Status';
 
-        final String employeeID = deliveryData!['employedID']?.toString() ?? '';
+        // Resolve delivery personnel: prefer employeeID on delivery doc, fallback to current user
+        final String employeeID = (deliveryData!['employeeID'] ?? deliveryData!['employedID'] ?? '')
+            .toString()
+            .trim();
+
+        Future<DeliveryPersonnel?> _mapUserDocToPersonnel(DocumentSnapshot doc) async {
+          final data = doc.data() as Map<String, dynamic>?;
+          if (data == null) return null;
+          return DeliveryPersonnel.fromMap(data);
+        }
+
+        DeliveryPersonnel? resolvedPersonnel;
+
+        // 1) Try by employeeID from delivery doc
         if (employeeID.isNotEmpty) {
-          final personnelQuery = await FirebaseFirestore.instance
+          final byEmployeeId = await FirebaseFirestore.instance
               .collection('users')
               .where('employeeID', isEqualTo: employeeID)
+              .limit(1)
               .get();
-
-          if (personnelQuery.docs.isNotEmpty) {
-            deliveryPersonnel =
-                DeliveryPersonnel.fromMap(personnelQuery.docs.first.data());
+          if (byEmployeeId.docs.isNotEmpty) {
+            resolvedPersonnel = await _mapUserDocToPersonnel(byEmployeeId.docs.first);
           }
+        }
+
+        // 2) Fallback to current logged-in user (by uid)
+        if (resolvedPersonnel == null) {
+          final currentUser = FirebaseAuth.instance.currentUser;
+          if (currentUser != null) {
+            final byUid = await FirebaseFirestore.instance
+                .collection('users')
+                .doc(currentUser.uid)
+                .get();
+            if (byUid.exists) {
+              resolvedPersonnel = await _mapUserDocToPersonnel(byUid);
+            }
+          }
+        }
+
+        // 3) Fallback to current logged-in user's email lookup
+        if (resolvedPersonnel == null) {
+          final currentUser = FirebaseAuth.instance.currentUser;
+          final email = currentUser?.email;
+          if (email != null && email.isNotEmpty) {
+            final byEmail = await FirebaseFirestore.instance
+                .collection('users')
+                .where('email', isEqualTo: email)
+                .limit(1)
+                .get();
+            if (byEmail.docs.isNotEmpty) {
+              resolvedPersonnel = await _mapUserDocToPersonnel(byEmail.docs.first);
+            }
+          }
+        }
+
+        if (resolvedPersonnel != null) {
+          deliveryPersonnel = resolvedPersonnel;
         }
 
         final List<dynamic> itemsData = deliveryData!['deliveryItems'] ?? [];
@@ -590,7 +637,7 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
             ),
             const SizedBox(height: 10),
             Text(
-              'From: ${deliveryPersonnel?.name ?? "N/A"} | Greenstem Business Software | [${deliveryPersonnel?.email ?? "N/A"}]',
+              'From: ${deliveryPersonnel?.name ?? "N/A"} | ${deliveryPersonnel?.email ?? "N/A"} | SPMS',
               style: const TextStyle(
                 fontSize: 10,
                 fontWeight: FontWeight.bold,
@@ -780,60 +827,64 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
             ),
 
             const SizedBox(height: 100),
-
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                // Cancel button
-                ElevatedButton(
-                  onPressed: () {
-                    Navigator.pushReplacement(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => GoogleMapPage(
-                          deliveryCode: widget.deliveryCode,
-                          deliveryAddress: widget.deliveryAddress,
-                          deliveryLocation: widget.deliveryLocation,
-                          deliveryStatus: deliveryStatus,
-                          deliveryItems: widget.deliveryItems,
-                        ),
+          ],
+        ),
+      ),
+      bottomNavigationBar: SafeArea(
+        minimum: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+        child: Row(
+          children: [
+            Expanded(
+              child: ElevatedButton(
+                onPressed: () {
+                  Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => GoogleMapPage(
+                        deliveryCode: widget.deliveryCode,
+                        deliveryAddress: widget.deliveryAddress,
+                        deliveryLocation: widget.deliveryLocation,
+                        deliveryStatus: deliveryStatus,
+                        deliveryItems: widget.deliveryItems,
                       ),
-                    );
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFD7D7D7),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(5),
                     ),
-                    padding: const EdgeInsets.symmetric(horizontal: 37, vertical: 10),
+                  );
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFD7D7D7),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(5),
                   ),
-                  child: const Text(
-                    'Cancel',
-                    style: TextStyle(
-                      color: Color(0xFF8E8989),
-                    ),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+                child: const Text(
+                  'Cancel',
+                  style: TextStyle(
+                    color: Color(0xFF8E8989),
                   ),
                 ),
-                const SizedBox(width: 20),
-                ElevatedButton(
-                  onPressed: _handleConfirmation,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF1B6C07),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    padding: const EdgeInsets.symmetric(horizontal: 35, vertical: 10),
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: ElevatedButton(
+                onPressed: _handleConfirmation,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF1B6C07),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
                   ),
-                  child: const Text(
-                    'Confirm',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                    ),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+                child: const Text(
+                  'Confirm',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
                   ),
                 ),
-              ],
+              ),
             ),
           ],
         ),
