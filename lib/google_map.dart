@@ -1456,8 +1456,8 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
         // Re-center button to re-enter follow mode
         if (!_isFollowMode)
           Positioned(
-            bottom: 200,
-            left: 16,
+            bottom: 120,
+            left: 10,
             child: ElevatedButton.icon(
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.white,
@@ -1475,7 +1475,7 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
         // Navigation control buttons (bottom right)
         if (_isNavigating && !_hasReachedDestination)
           Positioned(
-            bottom: 200,
+            bottom: 120,
             right: 16,
             child: Column(
               children: [
@@ -1623,12 +1623,11 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
               return false;
             },
             child: DraggableScrollableSheet(
-            initialChildSize: 0.18,
-            // collapsed height
-            minChildSize: 0.12,
+            initialChildSize: 0.14,
+            minChildSize: 0.13,
             maxChildSize: 0.4,
             snap: true,
-            snapSizes: const [0.18, 0.4],
+            snapSizes: const [0.18,0.4],
             builder: (context, scrollController) {
               return Container(
                 decoration: const BoxDecoration(
@@ -1693,34 +1692,7 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
                         ],
                       ),
                       const SizedBox(height: 10),
-                      if (_isNavigating && !_hasReachedDestination) ...[
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 10,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.2),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: const Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.navigation, color: Colors.white),
-                              SizedBox(width: 8),
-                              Text(
-                                "Navigation Active",
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                      ],
+
                       if (_hasReachedDestination) ...[
                         Container(
                           padding: const EdgeInsets.symmetric(
@@ -1939,8 +1911,9 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
                             },
                           );
                         },
-                        child: const Text("Update",style: TextStyle(fontWeight: FontWeight.bold),),
+                        child: Text("Update",style: TextStyle(fontWeight: FontWeight.bold,color:Color(0xFF1B6C07),),
                       ),
+                      )
                     ],
                   ),
                 ),
