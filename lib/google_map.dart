@@ -4,14 +4,11 @@ import 'dart:math';
 import 'dart:ui' as ui;
 import 'dart:typed_data';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:delivery/changepassword.dart';
 import 'package:delivery/confirmation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show ByteData;
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:permission_handler/permission_handler.dart'
-    as permission_handler_plugin;
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 import 'config.dart';
@@ -89,6 +86,14 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
   double _arrivalThreshold = Config
       .arrivalThresholdMeters; // meters - consider arrived when within this distance
   _AppLifecycleObserver? _lifecycleObserver;
+
+  // Guidance banner enhancements
+  String _nextTurnText = "";           // e.g., In 120 m, Turn right onto Jalan ABC
+  String _followingTurnText = "";      // e.g., Then, Turn left onto Jalan DEF
+  String _etaText = "";                // e.g., 12 min
+
+  // Adaptive map padding with bottom sheet
+  double _mapBottomPadding = 170;
 
   // Navigation direction variables
   String _currentDirection = "Head towards destination";
@@ -972,25 +977,44 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
       if (diff > Config.headingDeviationDegrees) {
         _maybeReroute();
       }
-      // Update road/step name by finding the nearest step
+      // Update next and following turn messages using nearest steps
       if (_navSteps.isNotEmpty) {
-        String? stepName;
+        int nearestStepIndex = 0;
         double minStepDist = double.infinity;
-        for (final s in _navSteps) {
-          for (final p in s.points) {
+        for (int i = 0; i < _navSteps.length; i++) {
+          for (final p in _navSteps[i].points) {
             final d = _distanceMeters(_currentPosition!, p);
             if (d < minStepDist) {
               minStepDist = d;
-              stepName = s.instruction;
+              nearestStepIndex = i;
             }
           }
         }
-        if (stepName != null && stepName!.isNotEmpty) {
-          _currentDirection = stepName!; // show real instruction with road name
+
+        // Next turn text with approximate distance to the next step start
+        final _NavStep nextStep = _navSteps[nearestStepIndex];
+        double metersToNext = _distanceMeters(_currentPosition!, nextStep.points.first);
+        String distanceLabel = metersToNext < 50
+            ? "In ${metersToNext.toStringAsFixed(0)} m"
+            : "In ${metersToNext.round()} m";
+        _nextTurnText = nextStep.instruction.isNotEmpty
+            ? "$distanceLabel, ${nextStep.instruction}"
+            : _currentDirection;
+
+        // Following turn hint
+        if (nearestStepIndex + 1 < _navSteps.length) {
+          final _NavStep thenStep = _navSteps[nearestStepIndex + 1];
+          _followingTurnText = thenStep.instruction.isNotEmpty
+              ? "Then, ${thenStep.instruction}"
+              : "";
+        } else {
+          _followingTurnText = "";
         }
       }
     } else {
       _currentDirection = "You have arrived at your destination";
+      _nextTurnText = _currentDirection;
+      _followingTurnText = "";
     }
   }
 
@@ -1360,9 +1384,9 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
           indoorViewEnabled: true,
           tiltGesturesEnabled: true,
           rotateGesturesEnabled: true,
-          padding: const EdgeInsets.only(
+          padding: EdgeInsets.only(
             top: 80,
-            bottom: 170,
+            bottom: _mapBottomPadding,
             left: 6,
             right: 6,
           ),
@@ -1513,7 +1537,7 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
             ),
           ),
 
-        // Compact guidance banner
+        // Compact guidance banner (with next/then + ETA)
         if (_isNavigating && _destination != null && !_isCalculatingRoute)
           Positioned(
             top: 60,
@@ -1544,24 +1568,41 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
                   ),
                   const SizedBox(width: 10),
                   Expanded(
-                    child: Text(
-                      _currentDirection,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _nextTurnText.isNotEmpty ? _nextTurnText : _currentDirection,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        if (_followingTurnText.isNotEmpty)
+                          Text(
+                            _followingTurnText,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+                          ),
+                      ],
                     ),
                   ),
                   const SizedBox(width: 8),
-                  Text(
-                    _calculateDistance(_currentPosition!, _destination!),
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.blue,
-                    ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        _etaText.isNotEmpty ? _etaText : _calculateEstimatedTime(_currentPosition!, _destination!),
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black87),
+                      ),
+                      Text(
+                        _calculateDistance(_currentPosition!, _destination!),
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.blue),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -1570,7 +1611,18 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
 
         // Draggable delivery info
         if (_showDeliveryInfoCard)
-          DraggableScrollableSheet(
+          NotificationListener<DraggableScrollableNotification>(
+            onNotification: (n) {
+              final double screenH = MediaQuery.of(context).size.height;
+              final double base = 140;
+              final double extra = (n.extent * screenH) * 0.10;
+              final double newPad = (base + extra).clamp(120, 260);
+              if ((_mapBottomPadding - newPad).abs() > 2) {
+                setState(() => _mapBottomPadding = newPad);
+              }
+              return false;
+            },
+            child: DraggableScrollableSheet(
             initialChildSize: 0.18,
             // collapsed height
             minChildSize: 0.12,
@@ -1892,8 +1944,9 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
                     ],
                   ),
                 ),
-              );
-            },
+               );
+             },
+            ),
           ),
       ],
     );
