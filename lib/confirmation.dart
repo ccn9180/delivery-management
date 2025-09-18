@@ -1,4 +1,5 @@
 import 'dart:async' show Timer;
+import 'dart:typed_data';
 import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -11,6 +12,7 @@ import 'package:intl/intl.dart';
 import 'package:file_picker/file_picker.dart';
 import 'firebase_options.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:image/image.dart' as img;
 import 'google_map.dart';
 import 'dart:convert';
 
@@ -463,15 +465,35 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
         ),
       );
 
-      // Convert image file to Base64
-      final bytes = await _imageFile!.readAsBytes();
-      final proofBase64 = base64Encode(bytes);
-      debugPrint('✅ Image converted to Base64, length: ${proofBase64.length}');
+      // Compress image and store as Base64 in Firestore (no Storage used)
+      final now = DateTime.now();
+      final Uint8List originalBytes = await _imageFile!.readAsBytes();
+      img.Image? decoded = img.decodeImage(originalBytes);
+      if (decoded == null) {
+        throw Exception('Unable to decode selected image');
+      }
+
+      // Scale down to max 1024px on the longest side
+      const int maxSide = 1024;
+      if (decoded.width > maxSide || decoded.height > maxSide) {
+        decoded = img.copyResize(decoded, width: decoded.width >= decoded.height ? maxSide : null, height: decoded.height > decoded.width ? maxSide : null);
+      }
+
+      // Iteratively compress to keep under ~900KB
+      int quality = 60; // start reasonable
+      late Uint8List jpegBytes;
+      for (;;) {
+        final List<int> encoded = img.encodeJpg(decoded, quality: quality);
+        jpegBytes = Uint8List.fromList(encoded);
+        if (jpegBytes.lengthInBytes <= 900 * 1024 || quality <= 30) break;
+        quality -= 10; // reduce and retry
+      }
+
+      final String proofBase64 = base64Encode(jpegBytes);
 
       if (Navigator.of(context).canPop()) Navigator.of(context).pop(); // close loading dialog
 
-      // Update Firestore directly with Base64
-      final now = DateTime.now();
+      // Save Base64 directly (fits Firestore limits after compression)
       setState(() => _confirmedAt = now);
       _timer?.cancel();
 
@@ -481,7 +503,7 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
           .update({
         'status': 'Delivered',
         'deliveredAt': Timestamp.fromDate(now),
-        'deliveryProof': proofBase64, // store image as Base64 string
+        'deliveryProof': proofBase64,
       });
 
       final String employeeID = deliveryData?['employeeID'] ?? '';
