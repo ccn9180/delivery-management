@@ -260,39 +260,39 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
     _positionStream?.cancel();
     _positionStream =
         Geolocator.getPositionStream(
-          locationSettings: LocationSettings(
-            accuracy: LocationAccuracy.bestForNavigation,
+      locationSettings: LocationSettings(
+        accuracy: LocationAccuracy.bestForNavigation,
             distanceFilter:
                 (_isNavigating
                         ? Config.navigationUpdateDistance
                         : Config.locationUpdateDistance)
                     .toInt(),
-          ),
-        ).listen(
+      ),
+    ).listen(
           (Position position) {
-            if (mounted) {
-              setState(() {
+        if (mounted) {
+          setState(() {
                 _currentPosition = LatLng(
                   position.latitude,
                   position.longitude,
                 );
-              });
-              if (_isNavigating && _destination != null) {
-                _updateNavigation(position);
-                // If we already have a route, keep it; otherwise draw now
-                if (_polylines.isEmpty) {
-                  _showRouteDirection(_currentPosition!, _destination!);
-                } else {
-                  _maybeReroute();
-                }
-              }
+          });
+          if (_isNavigating && _destination != null) {
+            _updateNavigation(position);
+            // If we already have a route, keep it; otherwise draw now
+            if (_polylines.isEmpty) {
+              _showRouteDirection(_currentPosition!, _destination!);
+            } else {
+              _maybeReroute();
             }
-          },
-          onError: (error) {
-            debugPrint('Location tracking error: $error');
-            // Don't show error to user, just log it
-          },
-        );
+          }
+        }
+      },
+      onError: (error) {
+        debugPrint('Location tracking error: $error');
+        // Don't show error to user, just log it
+      },
+    );
   }
 
   // Open native Google Maps (or web) for full turn-by-turn with road names
@@ -1248,9 +1248,9 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
     final double lng2 =
         lng1 +
         atan2(
-          sin(bearingRad) * sin(delta) * cos(lat1),
-          cos(delta) - sin(lat1) * sin(lat2),
-        );
+      sin(bearingRad) * sin(delta) * cos(lat1),
+      cos(delta) - sin(lat1) * sin(lat2),
+    );
 
     return LatLng(lat2 * (180 / pi), ((lng2 * (180 / pi) + 540) % 360) - 180);
   }
@@ -1402,15 +1402,15 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
           markers: _isNavigating
               ? _markers
               : {
-                  Marker(
-                    markerId: const MarkerId("current_user"),
-                    position: _currentPosition!,
-                    infoWindow: const InfoWindow(title: "You are here"),
+            Marker(
+              markerId: const MarkerId("current_user"),
+              position: _currentPosition!,
+              infoWindow: const InfoWindow(title: "You are here"),
                     icon: BitmapDescriptor.defaultMarkerWithHue(
                       BitmapDescriptor.hueAzure,
                     ),
                   ),
-                },
+          },
           polylines: _polylines,
           onMapCreated: (GoogleMapController controller) {
             _mapController = controller;
@@ -1573,8 +1573,8 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
                       children: [
                         Text(
                           _nextTurnText.isNotEmpty ? _nextTurnText : _currentDirection,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
@@ -1598,8 +1598,8 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
                         _etaText.isNotEmpty ? _etaText : _calculateEstimatedTime(_currentPosition!, _destination!),
                         style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black87),
                       ),
-                      Text(
-                        _calculateDistance(_currentPosition!, _destination!),
+                  Text(
+                    _calculateDistance(_currentPosition!, _destination!),
                         style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.blue),
                       ),
                     ],
@@ -1609,317 +1609,322 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
             ),
           ),
 
-        // Draggable delivery info
+        // Draggable delivery info sheet: pull up/down like a drawer
         if (_showDeliveryInfoCard)
-          NotificationListener<DraggableScrollableNotification>(
-            onNotification: (n) {
-              final double screenH = MediaQuery.of(context).size.height;
-              final double base = 140;
-              final double extra = (n.extent * screenH) * 0.10;
-              final double newPad = (base + extra).clamp(120, 260);
-              if ((_mapBottomPadding - newPad).abs() > 2) {
-                setState(() => _mapBottomPadding = newPad);
-              }
-              return false;
-            },
-            child: DraggableScrollableSheet(
-            initialChildSize: 0.14,
-            minChildSize: 0.13,
-            maxChildSize: 0.4,
+          DraggableScrollableSheet(
+            initialChildSize: 0.18, // collapsed height
+            minChildSize: 0.12,
+            maxChildSize: 0.40,
             snap: true,
-            snapSizes: const [0.18,0.4],
+            snapSizes: const [0.18, 0.40],
             builder: (context, scrollController) {
               return Container(
                 decoration: const BoxDecoration(
-                  color: Color(0xFF1B6C07),
+                  color: Colors.transparent, // Changed to transparent
                   borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
                 ),
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-                child: SingleChildScrollView(
-                  controller: scrollController,
-                  physics: const BouncingScrollPhysics(),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      // Grip
-                      Container(
-                        width: 36,
-                        height: 4,
-                        margin: const EdgeInsets.only(bottom: 8),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.6),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                      ),
-                      Text(
-                        '#${widget.deliveryCode ?? "Default code"}',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      Row(
-                        children: [
-                          const Icon(Icons.location_on, color: Colors.white),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: Text(
-                              widget.deliveryAddress ?? "Address Invalid",
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
+                child: Container(
+                  decoration: const BoxDecoration(
+                    color: Color(0xFF1B6C07),
+                    borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+                  ),
+                  child: SingleChildScrollView(
+                    controller: scrollController,
+                    physics: const ClampingScrollPhysics(),
+                    child: IntrinsicHeight(
+                      child: Container(
+                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            // Grip
+                            Container(
+                              width: 36,
+                              height: 8,
+                              margin: const EdgeInsets.only(bottom: 12),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.6),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                            ),
+                            Text(
+                              '#${widget.deliveryCode ?? "Default code"}',
                               style: const TextStyle(
                                 color: Colors.white,
-                                fontSize: 13,
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
                               ),
                             ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          const Icon(Icons.timer, color: Colors.white),
-                          const SizedBox(width: 8),
-                          Text(
-                            _getEstimatedDeliveryTime(),
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 13,
+                            const SizedBox(height: 16),
+                            Row(
+                              children: [
+                                const Icon(Icons.location_on, color: Colors.white, size: 20),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                  child: Text(
+                                    widget.deliveryAddress ?? "Address Invalid",
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-
-                      if (_hasReachedDestination) ...[
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 10,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.green.withOpacity(0.3),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: const Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.location_on, color: Colors.white),
-                              SizedBox(width: 8),
-                              Text(
-                                "Destination Reached!",
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.bold,
+                            const SizedBox(height: 12),
+                            Row(
+                              children: [
+                                const Icon(Icons.timer, color: Colors.white, size: 20),
+                                const SizedBox(width: 8),
+                                Text(
+                                  _getEstimatedDeliveryTime(),
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 13,
+                                  ),
                                 ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                      ],
-                      if (_isExternalNavigationActive) ...[
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 10,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.blue.withOpacity(0.3),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: const Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.map, color: Colors.white),
-                              SizedBox(width: 8),
-                              Text(
-                                "External Navigation Active",
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                      ],
+                              ],
+                            ),
 
-                      ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.white,
-                          minimumSize: const Size.fromHeight(36),
-                          foregroundColor: Colors.green,
-                        ),
-                        onPressed: () {
-                          showDialog(
-                            context: context,
-                            builder: (context) {
-                              return StatefulBuilder(
-                                builder: (context, setState) {
-                                  return AlertDialog(
-                                    title: const Text(
-                                      "Delivery Status",
+                            if (_hasReachedDestination) ...[
+                              const SizedBox(height: 12),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 10,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.green.withOpacity(0.3),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(Icons.location_on, color: Colors.white),
+                                    SizedBox(width: 8),
+                                    Text(
+                                      "Destination Reached!",
                                       style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 14,
                                         fontWeight: FontWeight.bold,
-                                        fontSize: 20,
                                       ),
                                     ),
-                                    content: Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        // Show buttons OR reason input based on flag
-                                        if (!showReasonField) ...[
-                                          Row(
+                                  ],
+                                ),
+                              ),
+                            ],
+                            if (_isExternalNavigationActive) ...[
+                              const SizedBox(height: 12),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 10,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.blue.withOpacity(0.3),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(Icons.map, color: Colors.white),
+                                    SizedBox(width: 8),
+                                    Text(
+                                      "External Navigation Active",
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+
+                            const SizedBox(height: 16),
+                            ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.white,
+                                minimumSize: const Size.fromHeight(44),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                foregroundColor: const Color(0xFF1B6C07),
+                              ),
+                              onPressed: () {
+                                showDialog(
+                                  context: context,
+                                  builder: (context) {
+                                    return StatefulBuilder(
+                                      builder: (context, setState) {
+                                        return AlertDialog(
+                                          title: const Text(
+                                            "Delivery Status",
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 20,
+                                            ),
+                                          ),
+                                          content: Column(
+                                            mainAxisSize: MainAxisSize.min,
                                             children: [
-                                              // Failed Button
-                                              Expanded(
-                                                child: SizedBox(
-                                                  height: 48,
-                                                  child: ElevatedButton(
-                                                    style: ElevatedButton.styleFrom(
-                                                      backgroundColor: Colors.red,
-                                                    ),
-                                                    onPressed: () {
-                                                      setState(() {
-                                                        showReasonField = true;
-                                                      });
-                                                    },
-                                                    child: const FittedBox(
-                                                      fit: BoxFit.scaleDown,
-                                                      child: Text(
-                                                        "Failed",
-                                                        style: TextStyle(
-                                                          color: Colors.white,
-                                                          fontWeight: FontWeight.bold,
-                                                          fontSize: 12.5,
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  ),
-                                                ),
-                                              ),
-
-                                              const SizedBox(width: 12), // spacing
-
-                                              // Confirmed Button
-                                              Expanded(
-                                                child: SizedBox(
-                                                  height: 48,
-                                                  child: ElevatedButton(
-                                                    style: ElevatedButton.styleFrom(
-                                                      backgroundColor: Colors.green,
-                                                    ),
-                                                    onPressed: () {
-                                                      Navigator.pop(context);
-                                                      Navigator.pushAndRemoveUntil(
-                                                        context,
-                                                        MaterialPageRoute(
-                                                          builder: (context) => ConfirmationPage(
-                                                            deliveryCode: widget.deliveryCode,
-                                                            deliveryAddress: widget.deliveryAddress,
-                                                            deliveryItems: widget.deliveryItems,
+                                              // Show buttons OR reason input based on flag
+                                              if (!showReasonField) ...[
+                                                Row(
+                                                  children: [
+                                                    // Failed Button
+                                                    Expanded(
+                                                      child: SizedBox(
+                                                        height: 48,
+                                                        child: ElevatedButton(
+                                                          style: ElevatedButton.styleFrom(
+                                                            backgroundColor: Colors.red,
+                                                          ),
+                                                          onPressed: () {
+                                                            setState(() {
+                                                              showReasonField = true;
+                                                            });
+                                                          },
+                                                          child: const FittedBox(
+                                                            fit: BoxFit.scaleDown,
+                                                            child: Text(
+                                                              "Failed",
+                                                              style: TextStyle(
+                                                                color: Colors.white,
+                                                                fontWeight: FontWeight.bold,
+                                                                fontSize: 12.5,
+                                                              ),
+                                                            ),
                                                           ),
                                                         ),
-                                                            (route) => route.isFirst,
-                                                      );
-                                                    },
-                                                    child: const FittedBox(
-                                                      fit: BoxFit.scaleDown,
-                                                      child: Text(
-                                                        "Confirmed",
-                                                        style: TextStyle(
-                                                          color: Colors.white,
-                                                          fontWeight: FontWeight.bold,
+                                                      ),
+                                                    ),
+
+                                                    const SizedBox(width: 20), // spacing
+
+                                                    // Confirmed Button
+                                                    Expanded(
+                                                      child: SizedBox(
+                                                        height: 48,
+                                                        child: ElevatedButton(
+                                                          style: ElevatedButton.styleFrom(
+                                                            backgroundColor: Colors.green,
+                                                          ),
+                                                          onPressed: () {
+                                                            Navigator.pop(context);
+                                                            Navigator.pushAndRemoveUntil(
+                                                              context,
+                                                              MaterialPageRoute(
+                                                                builder: (context) => ConfirmationPage(
+                                                                  deliveryCode: widget.deliveryCode,
+                                                                  deliveryAddress: widget.deliveryAddress,
+                                                                  deliveryItems: widget.deliveryItems,
+                                                                ),
+                                                              ),
+                                                                  (route) => route.isFirst,
+                                                            );
+                                                          },
+                                                          child: const FittedBox(
+                                                            fit: BoxFit.scaleDown,
+                                                            child: Text(
+                                                              "Confirmed",
+                                                              style: TextStyle(
+                                                                color: Colors.white,
+                                                                fontWeight: FontWeight.bold,
+                                                              ),
+                                                            ),
+                                                          ),
                                                         ),
                                                       ),
                                                     ),
-                                                  ),
+                                                  ],
                                                 ),
-                                              ),
+                                              ],
+                                              // Reason input view
+                                              if (showReasonField) ...[
+                                                TextField(
+                                                  controller: reasonController,
+                                                  decoration: const InputDecoration(
+                                                    labelText: "Enter reason for failure",
+                                                    border: OutlineInputBorder(),
+                                                  ),
+                                                  keyboardType: TextInputType.multiline,
+                                                  minLines: 1,
+                                                  maxLines: 5,
+                                                  textInputAction: TextInputAction.done,
+                                                  onSubmitted: (_) => _submitReason(), // Press Enter to submit
+                                                ),
+                                                const SizedBox(height: 8),
+                                                Row(
+                                                  children: [
+                                                    // Back Button
+                                                    Expanded(
+                                                      child: ElevatedButton(
+                                                        style: ElevatedButton.styleFrom(
+                                                          backgroundColor: Colors.grey,
+                                                        ),
+                                                        onPressed: () {
+                                                          setState(() {
+                                                            showReasonField = false;
+                                                            reasonController.clear();
+                                                          });
+                                                        },
+                                                        child: const Text(
+                                                          "Back",
+                                                          style: TextStyle(
+                                                            color: Colors.white,
+                                                            fontWeight: FontWeight.bold,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    const SizedBox(width: 12),
+                                                    // Submit Button
+                                                    Expanded(
+                                                      child: ElevatedButton(
+                                                        style: ElevatedButton.styleFrom(
+                                                          backgroundColor: Colors.red,
+                                                        ),
+                                                        onPressed: _submitReason, // Reuse the same function
+                                                        child: const Text(
+                                                          "Submit",
+                                                          style: TextStyle(
+                                                            color: Colors.white,
+                                                            fontWeight: FontWeight.bold,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ],
                                             ],
                                           ),
-                                        ],
-                                        // Reason input view
-                                        if (showReasonField) ...[
-                                          TextField(
-                                            controller: reasonController,
-                                            decoration: const InputDecoration(
-                                              labelText: "Enter reason for failure",
-                                              border: OutlineInputBorder(),
-                                            ),
-                                            keyboardType: TextInputType.multiline,
-                                            minLines: 1,
-                                            maxLines: 5,
-                                            textInputAction: TextInputAction.done,
-                                            onSubmitted: (_) => _submitReason(), // Press Enter to submit
-                                          ),
-                                          const SizedBox(height: 8),
-                                          Row(
-                                            children: [
-                                              // Back Button
-                                              Expanded(
-                                                child: ElevatedButton(
-                                                  style: ElevatedButton.styleFrom(
-                                                    backgroundColor: Colors.grey,
-                                                  ),
-                                                  onPressed: () {
-                                                    setState(() {
-                                                      showReasonField = false;
-                                                      reasonController.clear();
-                                                    });
-                                                  },
-                                                  child: const Text(
-                                                    "Back",
-                                                    style: TextStyle(
-                                                      color: Colors.white,
-                                                      fontWeight: FontWeight.bold,
-                                                    ),
-                                                  ),
-                                                ),
-                                              ),
-                                              const SizedBox(width: 12),
-                                              // Submit Button
-                                              Expanded(
-                                                child: ElevatedButton(
-                                                  style: ElevatedButton.styleFrom(
-                                                    backgroundColor: Colors.red,
-                                                  ),
-                                                  onPressed: _submitReason, // Reuse the same function
-                                                  child: const Text(
-                                                    "Submit",
-                                                    style: TextStyle(
-                                                      color: Colors.white,
-                                                      fontWeight: FontWeight.bold,
-                                                    ),
-                                                  ),
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ],
-                                      ],
-                                    ),
-                                  );
-                                },
-                              );
-                            },
-                          );
-                        },
-                        child: Text("Update",style: TextStyle(fontWeight: FontWeight.bold,color:Color(0xFF1B6C07),),
+                                        );
+                                      },
+                                    );
+                                  },
+                                );
+                              },
+                              child: const Text(
+                                "Update",
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                      )
-                    ],
+                    ),
                   ),
                 ),
-               );
-             },
-            ),
+              );
+            },
           ),
       ],
     );
