@@ -1,9 +1,7 @@
 import 'dart:async' show Timer;
 import 'dart:typed_data';
 import 'dart:io';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:delivery/profile.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -73,10 +71,12 @@ class Recipient {
 class DeliveryItem {
   final String itemID;
   final int quantity;
+  String? itemName;
 
   DeliveryItem({
     required this.itemID,
     required this.quantity,
+    this.itemName,
   });
 
   factory DeliveryItem.fromMap(Map<String, dynamic> m) => DeliveryItem(
@@ -105,6 +105,7 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
 
   File? _imageFile;
   final ImagePicker _picker = ImagePicker();
+  bool _isUploading = false;
 
   DateTime _currentTime = DateTime.now();
   DateTime? _confirmedAt;
@@ -141,6 +142,41 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
   void dispose() {
     _timer?.cancel();
     super.dispose();
+  }
+
+  Future<void> _loadItemNames(List<DeliveryItem> items) async {
+    if (items.isEmpty) return;
+
+    try {
+      // Collect all itemIDs
+      final itemIDs = items.map((i) => i.itemID.trim()).toList();
+
+      // Batch get all documents in one call
+      final querySnapshot = await FirebaseFirestore.instance
+          .collection('items')
+          .where(FieldPath.documentId, whereIn: itemIDs)
+          .get();
+
+      // Map from docID -> name
+      final Map<String, String> idToName = {
+        for (var doc in querySnapshot.docs) doc.id: doc.data()['itemName'] ?? 'Unknown Item'
+      };
+
+      // Assign names to delivery items
+      for (var item in items) {
+        item.itemName = idToName[item.itemID.trim()] ?? 'Unknown Item';
+        if (item.itemName == 'Unknown Item') {
+          debugPrint("⚠️ No name found for itemID: ${item.itemID}");
+        } else {
+          debugPrint("✅ Found name '${item.itemName}' for itemID: ${item.itemID}");
+        }
+      }
+    } catch (e) {
+      debugPrint("❌ Error loading item names: $e");
+      for (var item in items) {
+        item.itemName = 'Unknown Item';
+      }
+    }
   }
 
   Future<void> _loadData() async {
@@ -298,6 +334,8 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
           }
         }
 
+        await _loadItemNames(newDeliveryItems);
+
         if (mounted) {
           setState(() {
             deliveryItems = newDeliveryItems;
@@ -430,14 +468,13 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
 
   Future<void> _handleConfirmation() async {
     if (_imageFile == null || !_imageFile!.existsSync()) {
-      debugPrint('❌ No image file selected or file does not exist.');
+      debugPrint('No image file selected or file does not exist.');
       _showImageRequiredError();
       return;
     }
 
     final docIdToUpdate = _deliveryDocId ?? widget.deliveryCode;
     if (docIdToUpdate == null || docIdToUpdate.isEmpty) {
-      debugPrint('❌ Invalid delivery reference: $docIdToUpdate');
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Invalid delivery reference'),
@@ -447,87 +484,19 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
       return;
     }
 
+    setState(() => _isUploading = true);
+
     try {
-      // Show loading indicator
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (_) => const AlertDialog(
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              CircularProgressIndicator(),
-              SizedBox(height: 16),
-              Text('Uploading proof of delivery...'),
-            ],
-          ),
-        ),
-      );
-
-      // Compress image and store as Base64 in Firestore (no Storage used)
       final now = DateTime.now();
-      final Uint8List originalBytes = await _imageFile!.readAsBytes();
-      img.Image? decoded = img.decodeImage(originalBytes);
-      if (decoded == null) {
-        throw Exception('Unable to decode selected image');
-      }
 
-      // Scale down to max 1024px on the longest side
-      const int maxSide = 1024;
-      if (decoded.width > maxSide || decoded.height > maxSide) {
-        decoded = img.copyResize(decoded, width: decoded.width >= decoded.height ? maxSide : null, height: decoded.height > decoded.width ? maxSide : null);
-      }
+      // Compress and resize image
+      final String proofBase64 = await _compressAndEncodeImage(_imageFile!);
 
-      // Iteratively compress to keep under ~900KB
-      int quality = 60; // start reasonable
-      late Uint8List jpegBytes;
-      for (;;) {
-        final List<int> encoded = img.encodeJpg(decoded, quality: quality);
-        jpegBytes = Uint8List.fromList(encoded);
-        if (jpegBytes.lengthInBytes <= 900 * 1024 || quality <= 30) break;
-        quality -= 10; // reduce and retry
-      }
+      // Update delivery record
+      await _updateDeliveryRecord(docIdToUpdate, proofBase64, now);
 
-      final String proofBase64 = base64Encode(jpegBytes);
-
-      if (Navigator.of(context).canPop()) Navigator.of(context).pop(); // close loading dialog
-
-      // Save Base64 directly (fits Firestore limits after compression)
       setState(() => _confirmedAt = now);
       _timer?.cancel();
-
-      await FirebaseFirestore.instance
-          .collection('delivery')
-          .doc(docIdToUpdate)
-          .update({
-        'status': 'Delivered',
-        'deliveredAt': Timestamp.fromDate(now),
-        'deliveryProof': proofBase64,
-      });
-
-      final String employeeID = deliveryData?['employeeID'] ?? '';
-      if (employeeID.isNotEmpty) {
-        final userQuery = await FirebaseFirestore.instance
-            .collection('users')
-            .where('employeeID', isEqualTo: employeeID)
-            .limit(1)
-            .get();
-
-
-        if (userQuery.docs.isNotEmpty) {
-          final userDocId = userQuery.docs.first.id;
-
-          await FirebaseFirestore.instance
-              .collection('users')
-              .doc(userDocId)
-              .update({
-            'deliveredCount': FieldValue.increment(1),
-          });
-          debugPrint("✅ Delivery count updated for employeeID: $employeeID");
-        } else {
-          debugPrint("⚠️ No user found with employeeID: $employeeID");
-        }
-      }
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -538,18 +507,59 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
       );
 
       await Future.delayed(const Duration(seconds: 2));
-      if (mounted) Navigator.pop(context);
+      if (mounted) {
+        Navigator.popUntil(context, (route) => route.isFirst);
+      }
 
     } catch (e) {
-      if (Navigator.of(context).canPop()) Navigator.of(context).pop(); // close loading dialog
-      debugPrint('❌ Firestore error: $e');
+      debugPrint('Confirmation error: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Upload failed: $e'),
           backgroundColor: Colors.red,
         ),
       );
+    } finally {
+      setState(() => _isUploading = false);
     }
+  }
+
+  /// Compress image and encode as Base64
+  Future<String> _compressAndEncodeImage(File imageFile) async {
+    final Uint8List bytes = await imageFile.readAsBytes();
+    img.Image? decoded = img.decodeImage(bytes);
+    if (decoded == null) throw Exception('Unable to decode selected image');
+
+    // Resize to max 1024px
+    const int maxSide = 1024;
+    if (decoded.width > maxSide || decoded.height > maxSide) {
+      decoded = img.copyResize(
+        decoded,
+        width: decoded.width >= decoded.height ? maxSide : null,
+        height: decoded.height > decoded.width ? maxSide : null,
+      );
+    }
+
+    // Compress to fit ~900KB
+    int quality = 60;
+    late Uint8List jpegBytes;
+    for (;;) {
+      final List<int> encoded = img.encodeJpg(decoded, quality: quality);
+      jpegBytes = Uint8List.fromList(encoded);
+      if (jpegBytes.lengthInBytes <= 900 * 1024 || quality <= 30) break;
+      quality -= 10;
+    }
+
+    return base64Encode(jpegBytes);
+  }
+
+  /// Update delivery document in Firestore
+  Future<void> _updateDeliveryRecord(String docId, String proofBase64, DateTime now) async {
+    await FirebaseFirestore.instance.collection('delivery').doc(docId).update({
+      'status': 'Delivered',
+      'deliveredAt': Timestamp.fromDate(now),
+      'deliveryProof': proofBase64,
+    });
   }
 
   @override
@@ -578,9 +588,13 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
       backgroundColor: Colors.white,
       appBar: AppBar(
         backgroundColor: Colors.white,
-        elevation: 0,
-        toolbarHeight: 110,
         centerTitle: true,
+        toolbarHeight: 80,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.black),
+          onPressed: () => Navigator.pop(context),
+        ),
         title: const Text(
           'Delivery Confirmation',
           style: TextStyle(
@@ -589,175 +603,213 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
             fontSize: 22,
           ),
         ),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.black),
-          onPressed: () {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(
-                builder: (context) => GoogleMapPage(
-                  deliveryCode: widget.deliveryCode,
-                  deliveryAddress: widget.deliveryAddress,
-                  deliveryLocation: widget.deliveryLocation,
-                  deliveryStatus: deliveryStatus,
-                  deliveryItems: widget.deliveryItems,
-                ),
-              ),
-            );
-          },
-        ),
-        actions: [
-          Column(
-            mainAxisAlignment: MainAxisAlignment.start,
-            children: [
-              Padding(
-                padding: const EdgeInsets.only(right: 16.0, top: 30.0), // small top padding
-                child: GestureDetector(
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (context) => const Profile()),
-                    );
-                  },
-                  child: Container(
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: Colors.white,
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black12,
-                          blurRadius: 4,
-                          offset: Offset(2, 2),
-                        ),
-                      ],
-                    ),
-                    padding: const EdgeInsets.all(8.0),
-                    child: const Icon(
-                      Icons.person,
-                      color: Color(0xFF1B6D07),
-                      size: 30,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Date: $currentDate',
-              style: const TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 10),
-            Text(
-              'From: ${deliveryPersonnel?.name ?? "N/A"} | ${deliveryPersonnel?.email ?? "N/A"} | SPMS',
-              style: const TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.bold,
-                color: Colors.black,
-              ),
-            ),
-            const SizedBox(height: 10),
-            Text(
-              'To: ${recipient?.name ?? "N/A"} | ${recipient?.email ?? "N/A"} | ${recipient?.address ?? "N/A"}',
-              style: const TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.bold,
-                color: Colors.black,
-              ),
-            ),
-            const SizedBox(height: 50),
-
-            Table(
-              border: TableBorder.symmetric(
-                inside: BorderSide(color: Colors.grey.shade300),
-              ),
-              columnWidths: const {
-                0: FlexColumnWidth(2),
-                1: FlexColumnWidth(1.5),
-                2: FlexColumnWidth(2),
-                3: FlexColumnWidth(2),
-                4: FlexColumnWidth(1.5),
-              },
-              children: [
-                TableRow(
+            // Delivery details card
+            Card(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              elevation: 2,
+              color: Colors.white,
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    for (var header in [
-                      'Item(s) Delivered',
-                      'Quantity',
-                      'Tracking Number',
-                      'Delivery Date',
-                      'Delivery Time'
-                    ])
-                      Padding(
-                        padding: const EdgeInsets.all(8.0),
-                        child: Center(
+                    // Date
+                    Text(
+                      "Delivered At: $currentDate  $currentTime",
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // From section
+                    Text("From", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        const Icon(Icons.person, size: 14, color: Color(0xFF1B6C07)),
+                        const SizedBox(width: 4),
+                        Expanded(
                           child: Text(
-                            header,
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
+                            "${deliveryPersonnel?.name ?? "N/A"}",
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                        ),
+                      ],
+                    ),
+                    Row(
+                      children: [
+                        const Icon(Icons.email, size: 14, color: Color(0xFF1B6C07)),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            "${deliveryPersonnel?.email ?? "N/A"}",
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                        ),
+                      ],
+                    ),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(Icons.location_on, size: 14, color: Color(0xFF1B6C07)),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            "SPMS",
+                            style: const TextStyle(fontSize: 12),
+                            softWrap: true,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    // To section
+                    Text("To", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        const Icon(Icons.person, size: 14, color: Color(0xFF1B6C07)),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            "${recipient?.name ?? "N/A"}",
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                        ),
+                      ],
+                    ),
+                    Row(
+                      children: [
+                        const Icon(Icons.email, size: 14, color: Color(0xFF1B6C07)),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text("${recipient?.email ?? "N/A"}", style: const TextStyle(fontSize: 12)),
+                        ),
+                      ],
+                    ),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(Icons.location_on, size: 14, color: Color(0xFF1B6C07)),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            "${recipient?.address ?? "N/A"}",
+                            style: const TextStyle(fontSize: 12),
+                            softWrap: true,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            SizedBox(height: 20),
+
+            // Items table
+            Text("Items for #${widget.deliveryCode ?? 'N/A'}",
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)
+            ),
+            SizedBox(height: 8),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: SizedBox(
+                width: 330,
+                child: Table(
+                  border: TableBorder.symmetric(
+                    inside: BorderSide(color: Colors.grey.shade300),
+                  ),
+                  columnWidths: const {
+                    0: FlexColumnWidth(2), // Item Name
+                    1: FlexColumnWidth(2), // Item(s) Delivered
+                    2: FlexColumnWidth(1), // Quantity
+                  },
+                  children: [
+                    // Header row
+                    TableRow(
+                      decoration: BoxDecoration(color: Colors.grey.shade200),
+                      children: const [
+                        Padding(
+                          padding: EdgeInsets.all(8),
+                          child: Center(
+                            child: Text(
+                              'Item Name',
+                              style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
                             ),
                           ),
                         ),
-                      ),
+                        Padding(
+                          padding: EdgeInsets.all(8),
+                          child: Center(
+                            child: Text(
+                              'Item(s) Delivered',
+                              style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ),
+                        Padding(
+                          padding: EdgeInsets.all(8),
+                          child: Center(
+                            child: Text(
+                              'Quantity',
+                              style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    // Data rows
+                    ...deliveryItems.map((item) {
+                      return TableRow(
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.all(8),
+                            child: Center(
+                              child: Text(
+                                item.itemName ?? 'N/A',
+                                style: const TextStyle(fontSize: 10),
+                              ),
+                            ),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.all(8),
+                            child: Center(
+                              child: Text(
+                                item.itemID,
+                                style: const TextStyle(fontSize: 10),
+                              ),
+                            ),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.all(8),
+                            child: Center(
+                              child: Text(
+                                item.quantity.toString(),
+                                style: const TextStyle(fontSize: 10),
+                              ),
+                            ),
+                          ),
+                        ],
+                      );
+                    }),
                   ],
                 ),
-
-                ...deliveryItems.map((item) {
-                  return TableRow(
-                    children: [
-                      Padding(
-                          padding: const EdgeInsets.all(8),
-                          child: Center(
-                            child: Text(item.itemID,
-                                style: const TextStyle(fontSize: 10)),
-                          )),
-                      Padding(
-                          padding: const EdgeInsets.all(8),
-                          child: Center(
-                            child: Text(item.quantity.toString(),
-                                style: const TextStyle(fontSize: 10)),
-                          )),
-                      Padding(
-                          padding: const EdgeInsets.all(8),
-                          child: Center(
-                            child: Text(widget.deliveryCode ?? 'N/A',
-                                style: const TextStyle(fontSize: 10)),
-                          )),
-                      Padding(
-                          padding: const EdgeInsets.all(8),
-                          child: Center(
-                            child: Text(currentDate,
-                                style: const TextStyle(fontSize: 10)),
-                          )),
-                      Padding(
-                          padding: const EdgeInsets.all(8),
-                          child: Center(
-                            child: Text(currentTime,
-                                style: const TextStyle(fontSize: 10)),
-                          )),
-                    ],
-                  );
-                }),
-              ],
+              ),
             ),
-
-            const SizedBox(height: 50),
-
-            const Text(
+            SizedBox(height: 30),
+            // Proof of Delivery
+            Text(
               'Confirmation Summary',
               style: TextStyle(
-                fontSize: 10,
+                fontSize: 14,
                 fontWeight: FontWeight.bold,
                 color: Colors.black,
               ),
@@ -790,106 +842,35 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
               ),
               style: const TextStyle(height: 1.5),
             ),
-
-            const SizedBox(height: 10),
-
-            // Image upload section
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(height: 10),
-                const SizedBox(height: 5),
-                GestureDetector(
-                  onTap: _showImageSourceActionSheet,
-                  child: Container(
-                    height: 140,
-                    width: 160,
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade300,
-                      borderRadius: BorderRadius.circular(12),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.3),
-                          offset: const Offset(4, 6),
-                          blurRadius: 8,
-                          spreadRadius: 1,
-                        ),
-                      ],
-                    ),
-                    child: _imageFile == null
-                        ? const Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.camera_alt_outlined,
-                            size: 40, color: Colors.black54),
-                        SizedBox(height: 8),
-                      ],
-                    )
-                        : ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: Image.file(
-                        _imageFile!,
-                        fit: BoxFit.cover,
-                        width: double.infinity,
-                      ),
-                    ),
-                  ),
+            SizedBox(height: 8),
+            GestureDetector(
+              onTap: _showImageSourceActionSheet,
+              child: Container(
+                height: 180,
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(12),
                 ),
-              ],
-            ),
-
-            const SizedBox(height: 20),
-
-            Text.rich(
-              const TextSpan(
-                text: 'Thank you for choosing our services, Please do not hesitate to reach out if you have any concerns regarding this delivery.',
-                style: TextStyle(fontSize: 10),
+                child: _imageFile == null
+                    ? const Center(child: Icon(Icons.camera_alt_outlined, size: 40, color: Colors.black54))
+                    : ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Image.file(_imageFile!, fit: BoxFit.cover, width: double.infinity),
+                ),
               ),
             ),
-
-            const SizedBox(height: 100),
           ],
         ),
       ),
+
       bottomNavigationBar: SafeArea(
         minimum: const EdgeInsets.fromLTRB(20, 8, 20, 20),
         child: Row(
           children: [
             Expanded(
               child: ElevatedButton(
-                onPressed: () {
-                  Navigator.pushReplacement(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => GoogleMapPage(
-                        deliveryCode: widget.deliveryCode,
-                        deliveryAddress: widget.deliveryAddress,
-                        deliveryLocation: widget.deliveryLocation,
-                        deliveryStatus: deliveryStatus,
-                        deliveryItems: widget.deliveryItems,
-                      ),
-                    ),
-                  );
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFD7D7D7),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(5),
-                  ),
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                ),
-                child: const Text(
-                  'Cancel',
-                  style: TextStyle(
-                    color: Color(0xFF8E8989),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: ElevatedButton(
-                onPressed: _handleConfirmation,
+                onPressed: _isUploading ? null : _handleConfirmation,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF1B6C07),
                   shape: RoundedRectangleBorder(
@@ -897,7 +878,16 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
                   ),
                   padding: const EdgeInsets.symmetric(vertical: 12),
                 ),
-                child: const Text(
+                child: _isUploading
+                    ? const SizedBox(
+                  height: 20,
+                  width: 20,
+                  child: CircularProgressIndicator(
+                    color: Colors.white,
+                    strokeWidth: 2,
+                  ),
+                )
+                    : const Text(
                   'Confirm',
                   style: TextStyle(
                     color: Colors.white,
