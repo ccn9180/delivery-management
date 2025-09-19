@@ -1100,7 +1100,7 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
     distance *= 1.5;
 
     // Assume average speed 30 km/h (2 min per km)
-    int baseMinutes = (distance * 2.0).round();
+    int baseMinutes = (distance * 6.5).round();
 
     // Add variability range (±20%)
     int minTime = (baseMinutes * 0.8).round();
