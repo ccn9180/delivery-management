@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:typed_data';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:delivery/profile_page.dart';
 import 'package:delivery/widget/header.dart';
@@ -21,6 +20,7 @@ class Delivery {
   final String? reason;
   final String? deliveryProof;
   final DateTime? deliveredAt;
+  final GeoPoint? location;
 
   Delivery({
     required this.code,
@@ -31,6 +31,7 @@ class Delivery {
     this.reason,
     this.deliveryProof,
     this.deliveredAt,
+    this.location,
   });
 
   factory Delivery.fromDoc(DocumentSnapshot doc) {
@@ -46,11 +47,12 @@ class Delivery {
       deliveredAt: data['deliveredAt'] != null
           ? (data['deliveredAt'] as Timestamp).toDate().toLocal()
           : null,
+      location: data['location'],
     );
   }
 }
 
-/// Cache for items to avoid re-reading the same doc
+// Cache for items, avoid re-reading the same doc
 final Map<String, Map<String, dynamic>> _itemCache = {};
 
 Future<String?> fetchEmployeeCode() async {
@@ -182,7 +184,10 @@ class _HomePageStatus extends State<HomePage> {
               icon: Icon(Icons.home),
               label: 'Deliveries List',
             ),
-            BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
+            BottomNavigationBarItem(
+                icon: Icon(Icons.person),
+                label: 'Profile'
+            ),
           ],
         ),
       ),
@@ -451,7 +456,7 @@ class _DeliveryListTabState extends State<DeliveryListTab>
           padding: const EdgeInsets.fromLTRB(7, 0, 7, 16),
           child: deliveryCard(
             context: context,
-            delivery: delivery, // pass full object
+            delivery: delivery,
             date: dateStr,
             time: timeStr,
           ),
@@ -468,6 +473,7 @@ Widget deliveryCard({
   required String date,
   required String time,
 }) {
+  final location= delivery.location;
   final code = delivery.code;
   final status = delivery.status;
   final address = delivery.address;
@@ -665,12 +671,8 @@ class DeliveryDetailsPopUp extends StatelessWidget {
     final width = MediaQuery.of(context).size.width;
     final height = MediaQuery.of(context).size.height;
 
-    final location =
-        delivery.items.isNotEmpty && delivery.items.first['location'] != null
-        ? LatLng(
-            (delivery.items.first['location'] as GeoPoint).latitude,
-            (delivery.items.first['location'] as GeoPoint).longitude,
-          )
+    final location = delivery.location != null
+        ?  LatLng(delivery.location!.latitude, delivery.location!.longitude)
         : LatLng(5.40688, 100.30968);
 
     return Material(
@@ -925,7 +927,9 @@ class DeliveryDetailsPopUp extends StatelessWidget {
                                 builder: (context) => GoogleMapPage(
                                   deliveryCode: delivery.code,
                                   deliveryAddress: delivery.address,
-                                  deliveryLocation: location,
+                                  deliveryLocation: delivery.location != null
+                                      ? LatLng(delivery.location!.latitude, delivery.location!.longitude)
+                                      : const LatLng(5.40688, 100.30968),
                                   deliveryStatus: delivery.status,
                                   deliveryItems: delivery.items,
                                 ),
