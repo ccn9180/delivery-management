@@ -43,6 +43,18 @@ class _ProfileState extends State<Profile> {
 
       if (doc.exists) {
         final data = doc.data()!;
+        String employeeID = data['employeeID'] ?? '';
+
+        int deliveredCount = 0;
+        if (employeeID.isNotEmpty) {
+          final querySnapshot = await FirebaseFirestore.instance
+              .collection('delivery')
+              .where('employeeID', isEqualTo: employeeID)
+              .where('status', isEqualTo: 'Delivered')
+              .get();
+          deliveredCount = querySnapshot.docs.length;
+        }
+
         setState(() {
           _displayName = data['name'] as String?;
           _profileImageUrl =
@@ -51,7 +63,7 @@ class _ProfileState extends State<Profile> {
               : null;
           _employeeID = data['employeeID'] ?? 'Not set';
           _phoneNum = data['phoneNumber'] ?? 'Not set';
-          _deliveredCount = data['deliveredCount'] ?? 0;
+          _deliveredCount = deliveredCount;
         });
       }
     } catch (e) {
