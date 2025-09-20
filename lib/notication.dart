@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 class NotificationsPage extends StatelessWidget {
   const NotificationsPage({super.key});
@@ -120,8 +121,8 @@ class NotificationsPage extends StatelessWidget {
                 ),
                 trailing: showAt != null
                     ? Text(
-                  "${showAt.hour}:${showAt.minute.toString().padLeft(2, '0')}",
-                  style: const TextStyle(color: Colors.grey),
+                  DateFormat("dd MMM yyyy, HH:mm").format(showAt),
+                  style: const TextStyle(color: Colors.grey, fontSize: 12),
                 )
                     : null,
                 onTap: () async {
