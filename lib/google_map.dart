@@ -145,7 +145,7 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
           if (mounted) {
             setState(() {
               _errorMessage =
-                  'Location services are disabled. Please enable them in your device settings.';
+              'Location services are disabled. Please enable them in your device settings.';
               _isLoading = false;
             });
           }
@@ -160,7 +160,7 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
           if (mounted) {
             setState(() {
               _errorMessage =
-                  'Location permission denied. Please grant permission to use this feature.';
+              'Location permission denied. Please grant permission to use this feature.';
               _isLoading = false;
             });
           }
@@ -175,7 +175,7 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
           if (mounted) {
             setState(() {
               _errorMessage =
-                  'Location permission is permanently denied. Please enable it from the app settings.';
+              'Location permission is permanently denied. Please enable it from the app settings.';
               _isLoading = false;
             });
           }
@@ -262,13 +262,13 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
           locationSettings: LocationSettings(
             accuracy: LocationAccuracy.bestForNavigation,
             distanceFilter:
-                (_isNavigating
-                        ? Config.navigationUpdateDistance
-                        : Config.locationUpdateDistance)
-                    .toInt(),
+            (_isNavigating
+                ? Config.navigationUpdateDistance
+                : Config.locationUpdateDistance)
+                .toInt(),
           ),
         ).listen(
-          (Position position) {
+              (Position position) {
             if (mounted) {
               setState(() {
                 _currentPosition = LatLng(
@@ -358,12 +358,12 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
             infoWindow: const InfoWindow(title: "Current Location"),
             icon: _isNavigating
                 ? (_navArrowIcon ??
-                      BitmapDescriptor.defaultMarkerWithHue(
-                        BitmapDescriptor.hueAzure,
-                      ))
+                BitmapDescriptor.defaultMarkerWithHue(
+                  BitmapDescriptor.hueAzure,
+                ))
                 : BitmapDescriptor.defaultMarkerWithHue(
-                    BitmapDescriptor.hueGreen,
-                  ),
+              BitmapDescriptor.hueGreen,
+            ),
             flat: _isNavigating,
             rotation: _isNavigating ? _currentBearing : 0,
             anchor: _isNavigating
@@ -730,9 +730,9 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
 
   // Get real road-based route from Google Directions API (use detailed legs/steps)
   Future<List<LatLng>> _getRoadBasedRoute(
-    LatLng origin,
-    LatLng destination,
-  ) async {
+      LatLng origin,
+      LatLng destination,
+      ) async {
     try {
       String url =
           'https://maps.googleapis.com/maps/api/directions/json?'
@@ -781,7 +781,7 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
           if (points.isNotEmpty) return points;
           // fallback to overview if steps missing
           String encodedPolyline =
-              data['routes'][0]['overview_polyline']['points'];
+          data['routes'][0]['overview_polyline']['points'];
           return _decodePolyline(encodedPolyline);
         } else {
           debugPrint(
@@ -898,9 +898,9 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
 
   // No-billing routing via OSRM public demo. Returns road-following points.
   Future<List<LatLng>> _getOsrmRoutePoints(
-    LatLng origin,
-    LatLng destination,
-  ) async {
+      LatLng origin,
+      LatLng destination,
+      ) async {
     try {
       final String url =
           'https://router.project-osrm.org/route/v1/driving/'
@@ -1065,10 +1065,10 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
 
     double a =
         sin(deltaLatRad / 2) * sin(deltaLatRad / 2) +
-        cos(lat1Rad) *
-            cos(lat2Rad) *
-            sin(deltaLngRad / 2) *
-            sin(deltaLngRad / 2);
+            cos(lat1Rad) *
+                cos(lat2Rad) *
+                sin(deltaLngRad / 2) *
+                sin(deltaLngRad / 2);
     double c = 2 * asin(sqrt(a));
 
     return earthRadius * c;
@@ -1095,18 +1095,25 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
     }
 
     double distance = _calculateDistanceInKm(_currentPosition!, _destination!);
-    // Apply a "road factor" to approximate actual travel distance
-    // roads usually 1.3x–1.8x longer than straight line
+
+    // Debug log
+    print("Distance between $_currentPosition and $_destination = $distance km");
+
+    // Apply road factor to approximate actual travel distance
     distance *= 1.5;
 
-    // Assume average speed 30 km/h (2 min per km)
+    // Very short trips (<0.5 km)
+    if (distance < 0.5) {
+      return "Estimated Time: 2-5 minutes";
+    }
+
     int baseMinutes = (distance * 6.5).round();
 
-    // Add variability range (±20%)
-    int minTime = (baseMinutes * 0.8).round();
-    int maxTime = (baseMinutes * 1.2).round();
+    // Add variability ±20% for min, +25% for max
+    int minTime = (baseMinutes * 0.7).round();
+    int maxTime = (baseMinutes * 1.25).round();
 
-    // Prevent unrealistically small times
+    // Ensure minimum 2 minutes
     minTime = minTime < 2 ? 2 : minTime;
     maxTime = maxTime < 2 ? 2 : maxTime;
 
@@ -1114,9 +1121,9 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
   }
 
   Future<List<LatLng>> _getRouteCoordinates(
-    LatLng origin,
-    LatLng destination,
-  ) async {
+      LatLng origin,
+      LatLng destination,
+      ) async {
     List<LatLng> polylineCoordinates = [];
     try {
       String url =
@@ -1127,7 +1134,7 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
         final data = json.decode(response.body);
         if (data['status'] == 'OK') {
           String encodedPolyline =
-              data['routes'][0]['overview_polyline']['points'];
+          data['routes'][0]['overview_polyline']['points'];
           polylineCoordinates = _decodePolyline(encodedPolyline);
         }
       }
@@ -1184,10 +1191,10 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
     );
     final double lng2 =
         lng1 +
-        atan2(
-          sin(bearingRad) * sin(delta) * cos(lat1),
-          cos(delta) - sin(lat1) * sin(lat2),
-        );
+            atan2(
+              sin(bearingRad) * sin(delta) * cos(lat1),
+              cos(delta) - sin(lat1) * sin(lat2),
+            );
 
     return LatLng(lat2 * (180 / pi), ((lng2 * (180 / pi) + 540) % 360) - 180);
   }
@@ -1339,15 +1346,15 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
           markers: _isNavigating
               ? _markers
               : {
-                  Marker(
-                    markerId: const MarkerId("current_user"),
-                    position: _currentPosition!,
-                    infoWindow: const InfoWindow(title: "You are here"),
-                    icon: BitmapDescriptor.defaultMarkerWithHue(
-                      BitmapDescriptor.hueAzure,
-                    ),
-                  ),
-                },
+            Marker(
+              markerId: const MarkerId("current_user"),
+              position: _currentPosition!,
+              infoWindow: const InfoWindow(title: "You are here"),
+              icon: BitmapDescriptor.defaultMarkerWithHue(
+                BitmapDescriptor.hueAzure,
+              ),
+            ),
+          },
           polylines: _polylines,
           onMapCreated: (GoogleMapController controller) {
             _mapController = controller;
@@ -1410,28 +1417,28 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
             ),
           ),
         // Navigation control buttons (bottom right)
-          Positioned(
-            bottom: 120,
-            right: 16,
-            child: Column(
-              children: [
-                FloatingActionButton(
-                  tooltip: 'Open in Google Maps',
-                  onPressed: _openExternalGoogleMaps,
-                  backgroundColor: Colors.white,
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(28),
-                    child: Image.asset(
-                      'assets/images/SWPS.png',
-                      width: 28,
-                      height: 28,
-                      fit: BoxFit.cover,
-                    ),
+        Positioned(
+          bottom: 120,
+          right: 16,
+          child: Column(
+            children: [
+              FloatingActionButton(
+                tooltip: 'Open in Google Maps',
+                onPressed: _openExternalGoogleMaps,
+                backgroundColor: Colors.white,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(28),
+                  child: Image.asset(
+                    'assets/images/SWPS.png',
+                    width: 28,
+                    height: 28,
+                    fit: BoxFit.cover,
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
+        ),
 
         // Return to internal navigation button (when external navigation is active)
         if (_isExternalNavigationActive)
