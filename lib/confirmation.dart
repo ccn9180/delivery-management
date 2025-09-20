@@ -166,13 +166,13 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
       for (var item in items) {
         item.itemName = idToName[item.itemID.trim()] ?? 'Unknown Item';
         if (item.itemName == 'Unknown Item') {
-          debugPrint("⚠️ No name found for itemID: ${item.itemID}");
+          debugPrint("No name found for itemID: ${item.itemID}");
         } else {
-          debugPrint("✅ Found name '${item.itemName}' for itemID: ${item.itemID}");
+          debugPrint("Found name '${item.itemName}' for itemID: ${item.itemID}");
         }
       }
     } catch (e) {
-      debugPrint("❌ Error loading item names: $e");
+      debugPrint("Error loading item names: $e");
       for (var item in items) {
         item.itemName = 'Unknown Item';
       }
