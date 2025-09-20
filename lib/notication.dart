@@ -6,7 +6,7 @@ import 'package:intl/intl.dart';
 class NotificationsPage extends StatelessWidget {
   const NotificationsPage({super.key});
 
-  // Stream of notifications that are visible now
+  // Stream of notifications
   Stream<QuerySnapshot> _notificationStream() async* {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
@@ -30,7 +30,7 @@ class NotificationsPage extends StatelessWidget {
       return;
     }
 
-    // Fetch notifications
+    //get notifications
     yield* FirebaseFirestore.instance
         .collection("notifications")
         .where("employeeID", isEqualTo: employeeId)
@@ -52,9 +52,9 @@ class NotificationsPage extends StatelessWidget {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF1B6C07),
-        leading: const BackButton(color: Colors.white),
-        title: const Text(
+        backgroundColor: Color(0xFF1B6C07),
+        leading: BackButton(color: Colors.white),
+        title: Text(
           "Notifications",
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
@@ -63,19 +63,19 @@ class NotificationsPage extends StatelessWidget {
         stream: _notificationStream(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
+            return Center(child: CircularProgressIndicator());
           }
 
           if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-            return const Center(child: Text("No notifications yet."));
+            return Center(child: Text("No notifications yet."));
           }
 
           final notifications = snapshot.data!.docs;
 
           return ListView.separated(
-            padding: const EdgeInsets.all(12),
+            padding: EdgeInsets.all(12),
             itemCount: notifications.length,
-            separatorBuilder: (_, __) => const Divider(),
+            separatorBuilder: (_, __) => Divider(),
             itemBuilder: (context, index) {
               final doc = notifications[index];
               final data = doc.data() as Map<String, dynamic>;
@@ -100,7 +100,7 @@ class NotificationsPage extends StatelessWidget {
                         child: Container(
                           width: 10,
                           height: 10,
-                          decoration: const BoxDecoration(
+                          decoration: BoxDecoration(
                             color: Colors.red,
                             shape: BoxShape.circle,
                           ),
@@ -121,9 +121,9 @@ class NotificationsPage extends StatelessWidget {
                 ),
                 trailing: showAt != null
                     ? Text(
-                  DateFormat("dd MMM yyyy, HH:mm").format(showAt),
-                  style: const TextStyle(color: Colors.grey, fontSize: 12),
-                )
+                        DateFormat("dd MMM yyyy, HH:mm").format(showAt),
+                        style: TextStyle(color: Colors.grey, fontSize: 12),
+                      )
                     : null,
                 onTap: () async {
                   if (!isRead) {

@@ -40,9 +40,9 @@ class _LoginPageState extends State<LoginPage> {
     try {
       UserCredential userCredential = await FirebaseAuth.instance
           .signInWithEmailAndPassword(
-        email: _emailController.text.trim(),
-        password: _passwordController.text.trim(),
-      );
+            email: _emailController.text.trim(),
+            password: _passwordController.text.trim(),
+          );
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("Welcome back, ${userCredential.user!.email}!")),
@@ -86,8 +86,9 @@ class _LoginPageState extends State<LoginPage> {
     }
 
     try {
-      await FirebaseAuth.instance
-          .sendPasswordResetEmail(email: _emailController.text.trim());
+      await FirebaseAuth.instance.sendPasswordResetEmail(
+        email: _emailController.text.trim(),
+      );
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -99,11 +100,12 @@ class _LoginPageState extends State<LoginPage> {
       if (e.code == 'invalid-email') {
         message = 'Invalid email. Please try again!';
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
     }
   }
+
   @override
   Widget build(BuildContext context) {
     final screenHeight = MediaQuery.of(context).size.height;
@@ -112,14 +114,11 @@ class _LoginPageState extends State<LoginPage> {
     return Scaffold(
       body: Container(
         width: double.infinity,
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [
-              Colors.white,
-              Color(0xFFEFFAEF),
-            ],
+            colors: [Colors.white, Color(0xFFEFFAEF)],
           ),
         ),
         child: SafeArea(
@@ -130,11 +129,11 @@ class _LoginPageState extends State<LoginPage> {
                   horizontal: screenWidth * 0.08,
                   vertical: 12,
                 ),
-                reverse: true, // ensures scroll moves up when keyboard opens
+
+                // scroll moves up when keyboard opens
+                reverse: true,
                 child: ConstrainedBox(
-                  constraints: BoxConstraints(
-                    minHeight: constraints.maxHeight,
-                  ),
+                  constraints: BoxConstraints(minHeight: constraints.maxHeight),
                   child: IntrinsicHeight(
                     child: Padding(
                       // Push content up when keyboard appears
@@ -144,7 +143,6 @@ class _LoginPageState extends State<LoginPage> {
                       child: Column(
                         children: [
                           SizedBox(height: screenHeight * 0.15),
-
                           // Logo
                           Image.asset(
                             'assets/images/SWPS.png',
@@ -174,21 +172,25 @@ class _LoginPageState extends State<LoginPage> {
                                   focusNode: _emailFocus,
                                   textInputAction: TextInputAction.next,
                                   keyboardType: TextInputType.emailAddress,
-                                  decoration:
-                                  _inputDecoration("Email", screenHeight),
+                                  decoration: _inputDecoration(
+                                    "Email",
+                                    screenHeight,
+                                  ),
                                   validator: (value) {
                                     if (value == null || value.isEmpty) {
                                       return 'Email is required';
                                     }
-                                    if (!RegExp(r'^[^@]+@[^@]+\.[^@]+')
-                                        .hasMatch(value)) {
+                                    if (!RegExp(
+                                      r'^[^@]+@[^@]+\.[^@]+',
+                                    ).hasMatch(value)) {
                                       return 'Enter a valid email';
                                     }
                                     return null;
                                   },
                                   onFieldSubmitted: (_) {
-                                    FocusScope.of(context)
-                                        .requestFocus(_passwordFocus);
+                                    FocusScope.of(
+                                      context,
+                                    ).requestFocus(_passwordFocus);
                                   },
                                 ),
                                 SizedBox(height: screenHeight * 0.02),
@@ -198,23 +200,26 @@ class _LoginPageState extends State<LoginPage> {
                                   controller: _passwordController,
                                   focusNode: _passwordFocus,
                                   obscureText: !_passwordVisible,
-                                  decoration: _inputDecoration(
-                                      "Password", screenHeight)
-                                      .copyWith(
-                                    suffixIcon: IconButton(
-                                      icon: Icon(
-                                        _passwordVisible
-                                            ? Icons.visibility
-                                            : Icons.visibility_off,
-                                        color: Colors.black54,
+                                  decoration:
+                                      _inputDecoration(
+                                        "Password",
+                                        screenHeight,
+                                      ).copyWith(
+                                        suffixIcon: IconButton(
+                                          icon: Icon(
+                                            _passwordVisible
+                                                ? Icons.visibility
+                                                : Icons.visibility_off,
+                                            color: Colors.black54,
+                                          ),
+                                          onPressed: () {
+                                            setState(() {
+                                              _passwordVisible =
+                                                  !_passwordVisible;
+                                            });
+                                          },
+                                        ),
                                       ),
-                                      onPressed: () {
-                                        setState(() {
-                                          _passwordVisible = !_passwordVisible;
-                                        });
-                                      },
-                                    ),
-                                  ),
                                   validator: (value) {
                                     if (value == null || value.isEmpty) {
                                       return 'Password is required';
@@ -228,7 +233,7 @@ class _LoginPageState extends State<LoginPage> {
                                   alignment: Alignment.centerRight,
                                   child: TextButton(
                                     onPressed: _forgotPassword,
-                                    child: const Text(
+                                    child: Text(
                                       'Forgot Password?',
                                       style: TextStyle(
                                         color: Color(0xFF1B6C07),
@@ -237,7 +242,6 @@ class _LoginPageState extends State<LoginPage> {
                                     ),
                                   ),
                                 ),
-
                                 SizedBox(height: screenHeight * 0.04),
 
                                 // Login button
@@ -256,21 +260,22 @@ class _LoginPageState extends State<LoginPage> {
                                   ),
                                   child: _isLoading
                                       ? SizedBox(
-                                    width: screenWidth * 0.06,
-                                    height: screenWidth * 0.06,
-                                    child: const CircularProgressIndicator(
-                                      color: Colors.white,
-                                      strokeWidth: 2,
-                                    ),
-                                  )
+                                          width: screenWidth * 0.06,
+                                          height: screenWidth * 0.06,
+                                          child:
+                                              const CircularProgressIndicator(
+                                                color: Colors.white,
+                                                strokeWidth: 2,
+                                              ),
+                                        )
                                       : Text(
-                                    'LOGIN',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: screenHeight * 0.025,
-                                    ),
-                                  ),
+                                          'LOGIN',
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: screenHeight * 0.025,
+                                          ),
+                                        ),
                                 ),
 
                                 SizedBox(height: screenHeight * 0.02),
@@ -300,11 +305,13 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 
-
   InputDecoration _inputDecoration(String hint, double screenHeight) {
     return InputDecoration(
       hintText: hint,
-      hintStyle: TextStyle(fontSize: screenHeight * 0.02, color: Colors.black54),
+      hintStyle: TextStyle(
+        fontSize: screenHeight * 0.02,
+        color: Colors.black54,
+      ),
       filled: true,
       fillColor: Colors.white,
       border: OutlineInputBorder(

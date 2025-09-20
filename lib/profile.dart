@@ -7,7 +7,8 @@ import 'package:image_picker/image_picker.dart';
 import 'package:image/image.dart' as img;
 
 class Profile extends StatefulWidget {
-  final void Function(String)? onImageChanged; // callback for updated image
+  // callback for updated image
+  final void Function(String)? onImageChanged;
 
   const Profile({super.key, this.onImageChanged});
 
@@ -17,7 +18,7 @@ class Profile extends StatefulWidget {
 
 class _ProfileState extends State<Profile> {
   File? _image;
-  String? _profileImageUrl; // Base64 string
+  String? _profileImageUrl;
   String? _displayName;
   String? _employeeID;
   String? _phoneNum;
@@ -31,7 +32,7 @@ class _ProfileState extends State<Profile> {
     _loadProfile();
   }
 
-  /// Load profile data from Firestore
+  // Load profile data from Firestore
   Future<void> _loadProfile() async {
     if (user == null) return;
 
@@ -80,7 +81,7 @@ class _ProfileState extends State<Profile> {
         : null;
   }
 
-  // Pick and upload image
+  // upload image
   Future<void> _pickAndUploadImage() async {
     final picker = ImagePicker();
     final pickedFile = await picker.pickImage(source: ImageSource.gallery);
@@ -111,7 +112,7 @@ class _ProfileState extends State<Profile> {
 
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text("Profile image updated!")));
+        ).showSnackBar(SnackBar(content: Text("Profile image updated!")));
       } catch (e) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text("Error updating profile image: $e")),
@@ -123,7 +124,7 @@ class _ProfileState extends State<Profile> {
   @override
   Widget build(BuildContext context) {
     if (_displayName == null) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
     return Scaffold(
@@ -134,13 +135,13 @@ class _ProfileState extends State<Profile> {
         centerTitle: true,
         toolbarHeight: 80,
         leading: Padding(
-          padding: const EdgeInsets.all(12),
+          padding: EdgeInsets.all(12),
           child: IconButton(
             onPressed: () => Navigator.pop(context),
-            icon: const Icon(Icons.arrow_back, color: Colors.black),
+            icon: Icon(Icons.arrow_back, color: Colors.black),
           ),
         ),
-        title: const Text(
+        title: Text(
           "Profile",
           style: TextStyle(
             color: Colors.black,
@@ -153,17 +154,17 @@ class _ProfileState extends State<Profile> {
         child: Container(
           color: Colors.white,
           child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(24, 10, 24, 24),
+            padding: EdgeInsets.fromLTRB(24, 10, 24, 24),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Avatar with outline and edit icon
                 Center(
                   child: GestureDetector(
                     onTap: _pickAndUploadImage,
                     child: LayoutBuilder(
                       builder: (context, constraints) {
-                        double avatarSize = MediaQuery.of(context).size.width * 0.4;
+                        double avatarSize =
+                            MediaQuery.of(context).size.width * 0.4;
                         return Stack(
                           alignment: Alignment.bottomRight,
                           children: [
@@ -180,20 +181,20 @@ class _ProfileState extends State<Profile> {
                               child: ClipOval(
                                 child: profileImageProvider != null
                                     ? Image(
-                                  image: profileImageProvider!,
-                                  fit: BoxFit.cover,
-                                  width: avatarSize,
-                                  height: avatarSize,
-                                )
+                                        image: profileImageProvider!,
+                                        fit: BoxFit.cover,
+                                        width: avatarSize,
+                                        height: avatarSize,
+                                      )
                                     : Container(
-                                  color: Colors.white,
-                                  alignment: Alignment.center,
-                                  child: Icon(
-                                    Icons.person,
-                                    size: avatarSize * 0.6,
-                                    color: const Color(0xFF1B6C07),
-                                  ),
-                                ),
+                                        color: Colors.white,
+                                        alignment: Alignment.center,
+                                        child: Icon(
+                                          Icons.person,
+                                          size: avatarSize * 0.6,
+                                          color: Color(0xFF1B6C07),
+                                        ),
+                                      ),
                               ),
                             ),
                             // Edit icon
@@ -201,7 +202,7 @@ class _ProfileState extends State<Profile> {
                               bottom: 0,
                               right: 0,
                               child: Container(
-                                padding: const EdgeInsets.all(6),
+                                padding: EdgeInsets.all(6),
                                 decoration: BoxDecoration(
                                   color: Colors.white,
                                   shape: BoxShape.circle,
@@ -210,7 +211,7 @@ class _ProfileState extends State<Profile> {
                                     width: 2,
                                   ),
                                 ),
-                                child: const Icon(
+                                child: Icon(
                                   Icons.edit,
                                   size: 20,
                                   color: Colors.green,
@@ -223,14 +224,29 @@ class _ProfileState extends State<Profile> {
                     ),
                   ),
                 ),
-
                 SizedBox(height: MediaQuery.of(context).size.height * 0.03),
 
                 // Info cards
-                _buildInfoCard(Icons.person, "Name", _displayName ?? "User Name"),
-                _buildInfoCard(Icons.badge, "Employee ID", _employeeID ?? "Not set"),
-                _buildInfoCard(Icons.phone, "Phone Number", _phoneNum ?? "Not set"),
-                _buildInfoCard(Icons.local_shipping, "Total Deliveries", _deliveredCount ?? 0),
+                _buildInfoCard(
+                  Icons.person,
+                  "Name",
+                  _displayName ?? "User Name",
+                ),
+                _buildInfoCard(
+                  Icons.badge,
+                  "Employee ID",
+                  _employeeID ?? "Not set",
+                ),
+                _buildInfoCard(
+                  Icons.phone,
+                  "Phone Number",
+                  _phoneNum ?? "Not set",
+                ),
+                _buildInfoCard(
+                  Icons.local_shipping,
+                  "Total Deliveries",
+                  _deliveredCount ?? 0,
+                ),
               ],
             ),
           ),
@@ -239,7 +255,7 @@ class _ProfileState extends State<Profile> {
     );
   }
 
-  /// Generic info card
+  // Generic info card
   Widget _buildInfoCard(IconData icon, String title, dynamic value) {
     return Card(
       margin: EdgeInsets.symmetric(
@@ -249,7 +265,7 @@ class _ProfileState extends State<Profile> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: ListTile(
         leading: Icon(icon, color: Colors.green),
-        title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+        title: Text(title, style: TextStyle(fontWeight: FontWeight.bold)),
         subtitle: Text(value?.toString() ?? "Not set"),
       ),
     );
