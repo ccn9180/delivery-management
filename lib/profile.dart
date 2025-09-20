@@ -151,9 +151,9 @@ class _ProfileState extends State<Profile> {
       ),
       body: SafeArea(
         child: Container(
-          color: Colors.white, // ensures no grey appears behind AppBar when scrolling
+          color: Colors.white,
           child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+            padding: const EdgeInsets.fromLTRB(24, 10, 24, 24),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [

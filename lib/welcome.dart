@@ -3,7 +3,8 @@ import 'package:lottie/lottie.dart';
 import 'login_page.dart';
 
 class WelcomePage extends StatelessWidget {
-  const WelcomePage({super.key});
+  final VoidCallback onFinished;
+  const WelcomePage({super.key,required this.onFinished});
 
   @override
   Widget build(BuildContext context) {
@@ -66,12 +67,7 @@ class WelcomePage extends StatelessWidget {
 
                     // Get Started Button
                     ElevatedButton(
-                      onPressed: () {
-                        Navigator.pushReplacement(
-                          context,
-                          MaterialPageRoute(builder: (context) => const LoginPage()),
-                        );
-                      },
+                      onPressed: onFinished,
                       style: ElevatedButton.styleFrom(
                         elevation: 6,
                         backgroundColor: const Color(0xFF1B6C07),

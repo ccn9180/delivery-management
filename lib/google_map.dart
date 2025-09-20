@@ -1751,8 +1751,7 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
                                                             backgroundColor: Colors.green,
                                                           ),
                                                           onPressed: () {
-                                                            Navigator.pop(context);
-                                                            Navigator.pushAndRemoveUntil(
+                                                            Navigator.push(
                                                               context,
                                                               MaterialPageRoute(
                                                                 builder: (context) => ConfirmationPage(
@@ -1761,7 +1760,6 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
                                                                   deliveryItems: widget.deliveryItems,
                                                                 ),
                                                               ),
-                                                                  (route) => route.isFirst,
                                                             );
                                                           },
                                                           child: const FittedBox(

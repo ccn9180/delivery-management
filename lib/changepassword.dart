@@ -60,15 +60,20 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
       Navigator.pop(context, true);
     } on FirebaseAuthException catch (e) {
       switch (e.code) {
-        case "wrong-password":
+        case "wrong-password": // sometimes used in signInWithEmail
+        case "invalid-credential": // common for reauthenticate
+        case "invalid-login-credentials": // newer SDK versions
           _showSnack("Old password is incorrect.");
           break;
+
         case "weak-password":
           _showSnack("New password is too weak (min 6 characters).");
           break;
+
         case "requires-recent-login":
           _showSnack("Please log in again before changing your password.");
           break;
+
         default:
           _showSnack("Error: ${e.message}");
       }
@@ -190,7 +195,7 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
         ),
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(30),
+        padding: const EdgeInsets.fromLTRB(30,10,30,10),
         child: Form(
           key: _formKey,
           child: Column(
@@ -262,35 +267,38 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
                 focusNode: _confirmFocus,
                 isLast: true,
               ),
-
               const SizedBox(height: 30),
+            ],
+          ),
+        ),
+      ),
 
-              // Reset Password Button
-              SizedBox(
-                width: double.infinity,
-                height: 48,
-                child: ElevatedButton(
-                  onPressed: _loading ? null : _resetPassword,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF1B6C07),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                  child: _loading
-                      ? const CircularProgressIndicator(color: Colors.white)
-                      : const Text(
-                    "Reset Password",
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
-                    ),
-                  ),
+      // reset button
+      bottomNavigationBar: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(30, 16, 30, 30),
+          child: SizedBox(
+            width: double.infinity,
+            height: 48,
+            child: ElevatedButton(
+              onPressed: _loading ? null : _resetPassword,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF1B6C07),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
                 ),
               ),
-              const SizedBox(height: 20),
-            ],
+              child: _loading
+                  ? const CircularProgressIndicator(color: Colors.white)
+                  : const Text(
+                "Reset Password",
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                ),
+              ),
+            ),
           ),
         ),
       ),

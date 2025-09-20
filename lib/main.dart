@@ -2,30 +2,64 @@ import 'package:delivery/welcome.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'firebase_options.dart';
 import 'homepage.dart';
 import 'login_page.dart';
-import 'dart:io';
-import 'package:google_maps_flutter_android/google_maps_flutter_android.dart';
+
 
 class Wrapper extends StatelessWidget {
   const Wrapper({super.key});
 
+  Future<bool> _isFirstRun() async {
+    final prefs = await SharedPreferences.getInstance();
+    final hasSeenWelcome = prefs.getBool('hasSeenWelcome') ?? false;
+    return !hasSeenWelcome;
+  }
+
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<User?>(
-      stream: FirebaseAuth.instance.authStateChanges(),
+    return FutureBuilder<bool>(
+      future: _isFirstRun(),
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
+        if (!snapshot.hasData) {
           return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
+            body: Center(child: CircularProgressIndicator(color: Colors.green)),
           );
         }
-        if (snapshot.hasData) {
-          return const HomePage(); // user logged in
+
+        final firstRun = snapshot.data!;
+        if (firstRun) {
+          return WelcomePage(
+            onFinished: () async {
+              final prefs = await SharedPreferences.getInstance();
+              await prefs.setBool('hasSeenWelcome', true);
+
+              // After onboarding, go to LoginPage
+              Navigator.of(context).pushReplacement(
+                MaterialPageRoute(builder: (_) => const LoginPage()),
+              );
+            },
+          );
         }
-        return const WelcomePage(); // user not logged in
+
+        // Not first run → use auth state
+        return StreamBuilder<User?>(
+          stream: FirebaseAuth.instance.authStateChanges(),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Scaffold(
+                body: Center(child: CircularProgressIndicator(color: Colors.green)),
+              );
+            }
+
+            if (snapshot.hasData) {
+              return const HomePage(); // logged in
+            } else {
+              return const LoginPage(); // logged out
+            }
+          },
+        );
       },
     );
   }

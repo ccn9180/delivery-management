@@ -498,19 +498,20 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
       setState(() => _confirmedAt = now);
       _timer?.cancel();
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Delivery confirmed!'),
-          backgroundColor: Colors.green,
-          duration: Duration(seconds: 2),
-        ),
-      );
-
+      //scaffold message
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Delivery confirmed!'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
       await Future.delayed(const Duration(seconds: 2));
       if (mounted) {
         Navigator.popUntil(context, (route) => route.isFirst);
       }
-
     } catch (e) {
       debugPrint('Confirmation error: $e');
       ScaffoldMessenger.of(context).showSnackBar(
@@ -905,12 +906,18 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
 
   // Loading & Error Screens
   Widget _loadingScreen() => Scaffold(
+    backgroundColor: Colors.white,
     appBar: AppBar(
       backgroundColor: Colors.white,
       elevation: 0,
+      centerTitle: true,
+      toolbarHeight: 80,
       title: const Text(
         'Delivery Confirmation',
-        style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+        style: TextStyle(
+            color:  Color(0xFF1B6C07),
+            fontWeight: FontWeight.bold
+        ),
       ),
       leading: IconButton(
         icon: const Icon(Icons.arrow_back, color: Colors.black),
@@ -921,12 +928,19 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
   );
 
   Widget _errorScreen() => Scaffold(
+    backgroundColor: Colors.white,
     appBar: AppBar(
       backgroundColor: Colors.white,
       elevation: 0,
+      centerTitle: true,
+      toolbarHeight: 80,
       title: const Text(
         'Delivery Confirmation',
-        style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+        style: TextStyle(
+          color: Color(0xFF1B6C07),
+          fontWeight: FontWeight.bold,
+          fontSize: 22,
+        ),
       ),
       leading: IconButton(
         icon: const Icon(Icons.arrow_back, color: Colors.black),

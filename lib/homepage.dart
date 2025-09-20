@@ -866,6 +866,9 @@ class DeliveryDetailsPopUp extends StatelessWidget {
                             onPressed: () => Navigator.of(context).pop(),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.grey.shade200,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
                             ),
                             child: const Text(
                               'Cancel',
@@ -884,10 +887,22 @@ class DeliveryDetailsPopUp extends StatelessWidget {
                                   .collection('delivery')
                                   .doc(delivery.code)
                                   .update({'status': 'On-Going'});
+                              
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content:
+                                    Text('#${delivery.code} has been accepted and is now On-Going'),
+                                    duration: Duration(seconds:2),
+                                    backgroundColor: Colors.green,
+                                  ),
+                              );
+                              
                               Navigator.of(context).pop();
                             },
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Color(0xFF1B6C07),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
                             ),
                             child: const Text(
                               'Accepted',
@@ -908,6 +923,9 @@ class DeliveryDetailsPopUp extends StatelessWidget {
                             onPressed: () => Navigator.of(context).pop(),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.grey.shade200,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
                             ),
                             child: const Text(
                               'Back',
@@ -937,6 +955,9 @@ class DeliveryDetailsPopUp extends StatelessWidget {
                             ),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Color(0xFF1B6C07),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
                             ),
                             child: const Text(
                               'Navigation',
@@ -957,6 +978,9 @@ class DeliveryDetailsPopUp extends StatelessWidget {
                             onPressed: () => Navigator.of(context).pop(),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.grey.shade200,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
                             ),
                             child: const Text(
                               'Back',
@@ -996,6 +1020,9 @@ class DeliveryDetailsPopUp extends StatelessWidget {
                             },
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.red.shade400,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
                             ),
                             child: const Text(
                               'View Reason',
@@ -1016,6 +1043,9 @@ class DeliveryDetailsPopUp extends StatelessWidget {
                             onPressed: () => Navigator.of(context).pop(),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.grey.shade200,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
                             ),
                             child: const Text(
                               'Back',
@@ -1124,6 +1154,9 @@ class DeliveryDetailsPopUp extends StatelessWidget {
                             },
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Color(0xFF1B6C07),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
                             ),
                             child: const Text(
                               'View Details',
@@ -1141,6 +1174,9 @@ class DeliveryDetailsPopUp extends StatelessWidget {
                       onPressed: () => Navigator.of(context).pop(),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Color(0xFF1B6C07),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
                       ),
                       child: const Text(
                         'Back',
