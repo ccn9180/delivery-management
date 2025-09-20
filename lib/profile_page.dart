@@ -1,4 +1,3 @@
-import 'package:delivery/changepassword.dart';
 import 'package:delivery/gmailauthhandler.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -27,6 +26,7 @@ class _ProfilePageState extends State<ProfilePage> {
     _loadUserProfile();
   }
 
+  //for update image
   void _updateProfileImage(String newImage) {
     setState(() => _profileImageUrl = newImage);
   }
@@ -45,13 +45,18 @@ class _ProfilePageState extends State<ProfilePage> {
     }
 
     try {
-      final doc = await FirebaseFirestore.instance.collection("users").doc(user!.uid).get();
+      final doc = await FirebaseFirestore.instance
+          .collection("users")
+          .doc(user!.uid)
+          .get();
 
       if (doc.exists) {
         final data = doc.data()!;
         setState(() {
           _profileImageUrl =
-          (data["profileImage"] as String?)?.isNotEmpty == true ? data["profileImage"] : null;
+              (data["profileImage"] as String?)?.isNotEmpty == true
+              ? data["profileImage"]
+              : null;
           _displayName = data["name"] as String?;
           _isLoading = false;
         });
@@ -67,7 +72,7 @@ class _ProfilePageState extends State<ProfilePage> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return const Scaffold(
+      return Scaffold(
         body: Center(child: CircularProgressIndicator(color: Colors.green)),
       );
     }
@@ -76,11 +81,11 @@ class _ProfilePageState extends State<ProfilePage> {
     final screenWidth = MediaQuery.of(context).size.width;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF1B6C07),
+      backgroundColor: Color(0xFF1B6C07),
       body: SafeArea(
         child: Column(
           children: [
-            // Header (fixed size)
+            // Header
             Padding(
               padding: EdgeInsets.symmetric(vertical: screenHeight * 0.03),
               child: Column(
@@ -90,29 +95,39 @@ class _ProfilePageState extends State<ProfilePage> {
                     backgroundColor: Colors.white,
                     backgroundImage: profileImageProvider,
                     child: profileImageProvider == null
-                        ? Icon(Icons.person, size: screenWidth * 0.22, color: const Color(0xFF1B6C07))
+                        ? Icon(
+                            Icons.person,
+                            size: screenWidth * 0.22,
+                            color: Color(0xFF1B6C07),
+                          )
                         : null,
                   ),
                   SizedBox(height: screenHeight * 0.015),
                   Text(
                     _displayName ?? 'User Name',
                     style: TextStyle(
-                        color: Colors.white, fontSize: screenHeight * 0.028, fontWeight: FontWeight.bold),
+                      color: Colors.white,
+                      fontSize: screenHeight * 0.028,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   SizedBox(height: screenHeight * 0.005),
                   Text(
                     user?.email ?? 'email',
-                    style: TextStyle(color: Colors.white70, fontSize: screenHeight * 0.018),
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: screenHeight * 0.018,
+                    ),
                   ),
                 ],
               ),
             ),
 
-            // White section (expand to fill remaining space)
+            //for below container
             Expanded(
               child: Container(
                 width: double.infinity,
-                decoration: const BoxDecoration(
+                decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.only(
                     topLeft: Radius.circular(30),
@@ -120,39 +135,70 @@ class _ProfilePageState extends State<ProfilePage> {
                   ),
                 ),
                 child: SingleChildScrollView(
-                  padding: EdgeInsets.symmetric(horizontal: screenWidth * 0.05, vertical: screenHeight * 0.03),
+                  padding: EdgeInsets.symmetric(
+                    horizontal: screenWidth * 0.05,
+                    vertical: screenHeight * 0.03,
+                  ),
                   child: Column(
                     children: [
                       ListTile(
-                        leading: Icon(Icons.person_outline, color: const Color(0xFF1B6C07), size: screenWidth * 0.07),
-                        title: Text('Profile', style: TextStyle(fontSize: screenHeight * 0.022)),
+                        leading: Icon(
+                          Icons.person_outline,
+                          color: Color(0xFF1B6C07),
+                          size: screenWidth * 0.07,
+                        ),
+                        title: Text(
+                          'Profile',
+                          style: TextStyle(fontSize: screenHeight * 0.022),
+                        ),
                         onTap: () {
                           Navigator.push(
                             context,
-                            MaterialPageRoute(builder: (context) => Profile(onImageChanged: _updateProfileImage)),
+                            MaterialPageRoute(
+                              builder: (context) =>
+                                  Profile(onImageChanged: _updateProfileImage),
+                            ),
                           );
                         },
                       ),
                       Divider(height: screenHeight * 0.01, thickness: 1),
                       ListTile(
-                        leading: Icon(Icons.vpn_key_outlined, color: const Color(0xFF1B6C07), size: screenWidth * 0.07),
-                        title: Text('Change Password', style: TextStyle(fontSize: screenHeight * 0.022)),
+                        leading: Icon(
+                          Icons.vpn_key_outlined,
+                          color: Color(0xFF1B6C07),
+                          size: screenWidth * 0.07,
+                        ),
+                        title: Text(
+                          'Change Password',
+                          style: TextStyle(fontSize: screenHeight * 0.022),
+                        ),
                         onTap: () {
                           Navigator.push(
                             context,
-                            MaterialPageRoute(builder: (context) => const GmailAuthHandler()),
+                            MaterialPageRoute(
+                              builder: (context) => GmailAuthHandler(),
+                            ),
                           );
                         },
                       ),
                       Divider(height: screenHeight * 0.01, thickness: 1),
                       ListTile(
-                        leading: Icon(Icons.logout, color: const Color(0xFF1B6C07), size: screenWidth * 0.07),
-                        title: Text('Log Out', style: TextStyle(fontSize: screenHeight * 0.022)),
+                        leading: Icon(
+                          Icons.logout,
+                          color: Color(0xFF1B6C07),
+                          size: screenWidth * 0.07,
+                        ),
+                        title: Text(
+                          'Log Out',
+                          style: TextStyle(fontSize: screenHeight * 0.022),
+                        ),
                         onTap: () async {
                           await FirebaseAuth.instance.signOut();
                           Navigator.of(context).pushAndRemoveUntil(
-                            MaterialPageRoute(builder: (context) => const LoginPage()),
-                                (route) => false, // remove all previous routes
+                            MaterialPageRoute(
+                              builder: (context) => LoginPage(),
+                            ),
+                            (route) => false, // remove all previous routes
                           );
                         },
                       ),

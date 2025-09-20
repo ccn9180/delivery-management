@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:lottie/lottie.dart';
-import 'login_page.dart';
 
 class WelcomePage extends StatelessWidget {
   final VoidCallback onFinished;
-  const WelcomePage({super.key,required this.onFinished});
+  const WelcomePage({super.key, required this.onFinished});
 
   @override
   Widget build(BuildContext context) {
@@ -14,21 +13,21 @@ class WelcomePage extends StatelessWidget {
     return Scaffold(
       body: Container(
         width: double.infinity,
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [
-              Colors.white,
-              Color(0xFFEFFAEF),
-            ],
+            colors: [Colors.white, Color(0xFFEFFAEF)],
           ),
         ),
         child: SafeArea(
           child: SingleChildScrollView(
             padding: EdgeInsets.symmetric(horizontal: screenWidth * 0.08),
             child: ConstrainedBox(
-              constraints: BoxConstraints(minHeight: screenHeight - MediaQuery.of(context).padding.vertical),
+              constraints: BoxConstraints(
+                minHeight:
+                    screenHeight - MediaQuery.of(context).padding.vertical,
+              ),
               child: IntrinsicHeight(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -40,7 +39,6 @@ class WelcomePage extends StatelessWidget {
                       repeat: true,
                       animate: true,
                     ),
-
                     SizedBox(height: screenHeight * 0.05),
 
                     // Title
@@ -49,7 +47,7 @@ class WelcomePage extends StatelessWidget {
                       style: TextStyle(
                         fontSize: screenHeight * 0.035,
                         fontWeight: FontWeight.bold,
-                        color: const Color(0xFF1B6C07),
+                        color: Color(0xFF1B6C07),
                       ),
                       textAlign: TextAlign.center,
                     ),
@@ -70,7 +68,7 @@ class WelcomePage extends StatelessWidget {
                       onPressed: onFinished,
                       style: ElevatedButton.styleFrom(
                         elevation: 6,
-                        backgroundColor: const Color(0xFF1B6C07),
+                        backgroundColor: Color(0xFF1B6C07),
                         padding: EdgeInsets.symmetric(
                           horizontal: screenWidth * 0.2,
                           vertical: screenHeight * 0.02,

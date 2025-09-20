@@ -7,10 +7,10 @@ import 'firebase_options.dart';
 import 'homepage.dart';
 import 'login_page.dart';
 
-
 class Wrapper extends StatelessWidget {
   const Wrapper({super.key});
 
+  //for first run show welcome, others no
   Future<bool> _isFirstRun() async {
     final prefs = await SharedPreferences.getInstance();
     final hasSeenWelcome = prefs.getBool('hasSeenWelcome') ?? false;
@@ -23,7 +23,7 @@ class Wrapper extends StatelessWidget {
       future: _isFirstRun(),
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
-          return const Scaffold(
+          return Scaffold(
             body: Center(child: CircularProgressIndicator(color: Colors.green)),
           );
         }
@@ -35,7 +35,7 @@ class Wrapper extends StatelessWidget {
               final prefs = await SharedPreferences.getInstance();
               await prefs.setBool('hasSeenWelcome', true);
 
-              // After onboarding, go to LoginPage
+              // go to LoginPage
               Navigator.of(context).pushReplacement(
                 MaterialPageRoute(builder: (_) => const LoginPage()),
               );
@@ -43,13 +43,15 @@ class Wrapper extends StatelessWidget {
           );
         }
 
-        // Not first run → use auth state
+        // Not first run, use auth state
         return StreamBuilder<User?>(
           stream: FirebaseAuth.instance.authStateChanges(),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const Scaffold(
-                body: Center(child: CircularProgressIndicator(color: Colors.green)),
+                body: Center(
+                  child: CircularProgressIndicator(color: Colors.green),
+                ),
               );
             }
 

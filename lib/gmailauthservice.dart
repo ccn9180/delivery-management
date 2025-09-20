@@ -12,8 +12,8 @@ class GmailAuthService {
 
   final FlutterAppAuth _appAuth = FlutterAppAuth();
 
-  /// Launches Google OAuth and returns the authenticated email if successful.
-  /// Returns null if authentication fails or email cannot be determined.
+  // Launches Google OAuth and returns the authenticated email if successful.
+  // Returns null if authentication fails or email cannot be determined.
   Future<String?> authenticateAndGetEmail() async {
     try {
       final AuthorizationTokenResponse? result =

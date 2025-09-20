@@ -60,9 +60,9 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
       Navigator.pop(context, true);
     } on FirebaseAuthException catch (e) {
       switch (e.code) {
-        case "wrong-password": // sometimes used in signInWithEmail
-        case "invalid-credential": // common for reauthenticate
-        case "invalid-login-credentials": // newer SDK versions
+        case "wrong-password":
+        case "invalid-credential":
+        case "invalid-login-credentials":
           _showSnack("Old password is incorrect.");
           break;
 
@@ -84,7 +84,7 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
     }
   }
 
-  /// Reusable password field with visibility toggle + focus control
+  // Reusable password field with visibility toggle + focus control
   Widget _buildPasswordField({
     required String label,
     required TextEditingController controller,
@@ -99,10 +99,10 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.only(bottom: 6, top: 10),
+          padding: EdgeInsets.only(bottom: 6, top: 10),
           child: Text(
             label,
-            style: const TextStyle(
+            style: TextStyle(
               fontWeight: FontWeight.w600,
               fontSize: 16,
             ),
@@ -128,22 +128,22 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: Colors.grey),
+              borderSide: BorderSide(color: Colors.grey),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: Color(0xFF1B6C07), width: 2),
+              borderSide: BorderSide(color: Color(0xFF1B6C07), width: 2),
             ),
             errorBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: Colors.red, width: 2),
+              borderSide: BorderSide(color: Colors.red, width: 2),
             ),
             focusedErrorBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: Colors.red, width: 2),
+              borderSide: BorderSide(color: Colors.red, width: 2),
             ),
             contentPadding:
-            const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+            EdgeInsets.symmetric(horizontal: 12, vertical: 14),
             suffixIcon: IconButton(
               icon: Icon(
                 isVisible ? Icons.visibility : Icons.visibility_off,
@@ -172,9 +172,6 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
 
   @override
   Widget build(BuildContext context) {
-    final media = MediaQuery.of(context);
-    final double buttonHeight = media.size.height * 0.065;
-
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -183,10 +180,10 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
         centerTitle: true,
         toolbarHeight: 80,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.black),
+          icon: Icon(Icons.arrow_back, color: Colors.black),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const Text(
+        title: Text(
           "Change Password",
           style: TextStyle(
             color: Colors.black,
@@ -195,28 +192,28 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
         ),
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(30,10,30,10),
+        padding: EdgeInsets.fromLTRB(30,10,30,10),
         child: Form(
           key: _formKey,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
+               Text(
                 "Choose a New Password",
                 style: TextStyle(
                   fontWeight: FontWeight.w600,
                   fontSize: 16,
                 ),
               ),
-              const SizedBox(height: 4),
-              const Text(
+               SizedBox(height: 4),
+               Text(
                 "Enter and confirm your new password to regain access",
                 style: TextStyle(
                   color: Colors.black54,
                   fontSize: 12.5,
                 ),
               ),
-              const SizedBox(height: 25),
+               SizedBox(height: 25),
 
               // Old Password
               _buildPasswordField(
@@ -267,7 +264,7 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
                 focusNode: _confirmFocus,
                 isLast: true,
               ),
-              const SizedBox(height: 30),
+               SizedBox(height: 30),
             ],
           ),
         ),
@@ -276,21 +273,21 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
       // reset button
       bottomNavigationBar: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(30, 16, 30, 30),
+          padding: EdgeInsets.fromLTRB(30, 16, 30, 30),
           child: SizedBox(
             width: double.infinity,
             height: 48,
             child: ElevatedButton(
               onPressed: _loading ? null : _resetPassword,
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF1B6C07),
+                backgroundColor: Color(0xFF1B6C07),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(10),
                 ),
               ),
               child: _loading
-                  ? const CircularProgressIndicator(color: Colors.white)
-                  : const Text(
+                  ? CircularProgressIndicator(color: Colors.white)
+                  : Text(
                 "Reset Password",
                 style: TextStyle(
                   fontSize: 16,

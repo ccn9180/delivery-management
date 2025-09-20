@@ -25,6 +25,7 @@ class _DeliveryHistoryState extends State<DeliveryHistory> {
   Stream<List<Delivery>> _fetchDeliveries() async* {
     final employeeCode = await fetchEmployeeCode();
     if (employeeCode == null) {
+      //return empty yield if not found
       yield [];
       return;
     }
@@ -35,16 +36,26 @@ class _DeliveryHistoryState extends State<DeliveryHistory> {
         .where('status', isEqualTo: 'Delivered')
         .orderBy('deliveryDate', descending: true);
 
+    //date filter
     if (_pickedDate != null) {
-      final startOfDay = DateTime(_pickedDate!.year, _pickedDate!.month, _pickedDate!.day).toUtc();
-      final endOfDay = DateTime(_pickedDate!.year, _pickedDate!.month, _pickedDate!.day, 23, 59, 59).toUtc();
+      final startOfDay = DateTime(
+        _pickedDate!.year,
+        _pickedDate!.month,
+        _pickedDate!.day,
+      ).toUtc();
+      final endOfDay = DateTime(
+        _pickedDate!.year,
+        _pickedDate!.month,
+        _pickedDate!.day, 23, 59, 59,).toUtc();
       query = query
           .where('deliveryDate', isGreaterThanOrEqualTo: startOfDay)
           .where('deliveryDate', isLessThanOrEqualTo: endOfDay);
     }
 
+    //convert firestore doc to delivery object
     yield* query.snapshots().map(
-            (snapshot) => snapshot.docs.map((doc) => Delivery.fromDoc(doc)).toList());
+      (snapshot) => snapshot.docs.map((doc) => Delivery.fromDoc(doc)).toList(),
+    );
   }
 
   @override
@@ -81,7 +92,9 @@ class _DeliveryHistoryState extends State<DeliveryHistory> {
                         setState(() {
                           _pickedDate = picked;
                           _searchQuery = "";
-                          _searchCtrl.text = DateFormat('dd/MM/yyyy').format(picked);
+                          _searchCtrl.text = DateFormat(
+                            'dd/MM/yyyy',
+                          ).format(picked);
                         });
                       }
                     },
@@ -89,7 +102,9 @@ class _DeliveryHistoryState extends State<DeliveryHistory> {
                   filled: true,
                   fillColor: Colors.grey[100],
                   border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
+                  ),
                 ),
                 onChanged: (value) {
                   setState(() {
@@ -99,7 +114,6 @@ class _DeliveryHistoryState extends State<DeliveryHistory> {
                 },
               ),
             ),
-
             const SizedBox(height: 12),
 
             // Delivery list
@@ -114,49 +128,31 @@ class _DeliveryHistoryState extends State<DeliveryHistory> {
 
                   // Apply search filter
                   final filtered = _searchQuery.isNotEmpty
-                      ? deliveries.where((d) =>
-                  d.code.toLowerCase().contains(_searchQuery) ||
-                      DateFormat('dd/MM/yyyy')
-                          .format(d.date)
-                          .toLowerCase()
-                          .contains(_searchQuery))
-                      .toList()
+                      ? deliveries
+                            .where(
+                              (d) =>
+                                  d.code.toLowerCase().contains(_searchQuery) ||
+                                  DateFormat('dd/MM/yyyy')
+                                      .format(d.date)
+                                      .toLowerCase()
+                                      .contains(_searchQuery),
+                            )
+                            .toList()
                       : deliveries;
 
                   if (filtered.isEmpty) {
                     return _emptyState();
                   }
 
-                  // ✅ Wait for item preload before building UI
+                  //Wait for item preload before building UI
                   return FutureBuilder<void>(
-                    future: preloadItems(filtered), // your preload method
+                    future: preloadItems(filtered),
                     builder: (context, preloadSnap) {
-                      if (preloadSnap.connectionState == ConnectionState.waiting) {
+                      if (preloadSnap.connectionState ==
+                          ConnectionState.waiting) {
                         return const Center(child: CircularProgressIndicator());
                       }
-
-                      final isWide = width > 600;
-                      return isWide
-                          ? GridView.builder(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 2,
-                          mainAxisSpacing: 16,
-                          crossAxisSpacing: 16,
-                          childAspectRatio: 3.5,
-                        ),
-                        itemCount: filtered.length,
-                        itemBuilder: (context, index) {
-                          final d = filtered[index];
-                          return deliveryCard(
-                            context: context,
-                            delivery: d,
-                            date: DateFormat('dd/MM/yyyy').format(d.date),
-                            time: DateFormat('hh:mm a').format(d.date),
-                          );
-                        },
-                      )
-                          : ListView.builder(
+                      return ListView.builder(
                         padding: const EdgeInsets.all(16),
                         itemCount: filtered.length,
                         itemBuilder: (context, index) {

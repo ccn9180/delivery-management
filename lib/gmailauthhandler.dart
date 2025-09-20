@@ -11,8 +11,6 @@ class GmailAuthHandler extends StatefulWidget {
 }
 
 class _GmailAuthHandlerState extends State<GmailAuthHandler> {
-  bool _isLoading = true;
-
   @override
   void initState() {
     super.initState();

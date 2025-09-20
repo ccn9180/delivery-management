@@ -10,7 +10,6 @@ import 'package:intl/intl.dart';
 import 'package:file_picker/file_picker.dart';
 import 'firebase_options.dart';
 import 'package:image/image.dart' as img;
-import 'google_map.dart';
 import 'dart:convert';
 
 class ConfirmationPage extends StatefulWidget {
@@ -33,6 +32,7 @@ class ConfirmationPage extends StatefulWidget {
   State<ConfirmationPage> createState() => _ConfirmationPageState();
 }
 
+//delivery man infor
 class DeliveryPersonnel {
   final String name;
   final String email;
@@ -54,6 +54,7 @@ class DeliveryPersonnel {
   );
 }
 
+//recipient info
 class Recipient {
   final String name;
   final String email;
@@ -68,6 +69,7 @@ class Recipient {
   );
 }
 
+//delivery item info
 class DeliveryItem {
   final String itemID;
   final int quantity;
@@ -157,22 +159,22 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
           .where(FieldPath.documentId, whereIn: itemIDs)
           .get();
 
-      // Map from docID -> name
+      // Map from docID to name
       final Map<String, String> idToName = {
         for (var doc in querySnapshot.docs) doc.id: doc.data()['itemName'] ?? 'Unknown Item'
       };
 
-      // Assign names to delivery items
+      // delivery item name
       for (var item in items) {
         item.itemName = idToName[item.itemID.trim()] ?? 'Unknown Item';
         if (item.itemName == 'Unknown Item') {
-          debugPrint("⚠️ No name found for itemID: ${item.itemID}");
+          debugPrint("No name found for itemID: ${item.itemID}");
         } else {
-          debugPrint("✅ Found name '${item.itemName}' for itemID: ${item.itemID}");
+          debugPrint("Found name '${item.itemName}' for itemID: ${item.itemID}");
         }
       }
     } catch (e) {
-      debugPrint("❌ Error loading item names: $e");
+      debugPrint("Error loading item names: $e");
       for (var item in items) {
         item.itemName = 'Unknown Item';
       }
@@ -280,7 +282,6 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
 
         DeliveryPersonnel? resolvedPersonnel;
 
-        // 1) Try by employeeID from delivery doc
         if (employeeID.isNotEmpty) {
           final byEmployeeId = await FirebaseFirestore.instance
               .collection('users')
@@ -292,7 +293,6 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
           }
         }
 
-        // 2) Fallback to current logged-in user (by uid)
         if (resolvedPersonnel == null) {
           final currentUser = FirebaseAuth.instance.currentUser;
           if (currentUser != null) {
@@ -306,7 +306,6 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
           }
         }
 
-        // 3) Fallback to current logged-in user's email lookup
         if (resolvedPersonnel == null) {
           final currentUser = FirebaseAuth.instance.currentUser;
           final email = currentUser?.email;
@@ -362,6 +361,7 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
     }
   }
 
+  //for take photo
   Future<void> _takePhoto() async {
     try {
       final XFile? pickedFile = await _picker.pickImage(
@@ -379,6 +379,7 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
     }
   }
 
+  //for choose from gallery
   Future<void> _pickFromGallery() async {
     try {
       final XFile? pickedFile =
@@ -396,6 +397,7 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
     }
   }
 
+  //from file
   Future<void> _pickFile() async {
     try {
       final result = await FilePicker.platform.pickFiles(
@@ -415,10 +417,11 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
     }
   }
 
+  //display
   void _showImageSourceActionSheet() {
     showModalBottomSheet(
       context: context,
-      shape: const RoundedRectangleBorder(
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
       builder: (BuildContext context) {
@@ -426,24 +429,24 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
           child: Wrap(
             children: [
               ListTile(
-                leading: const Icon(Icons.camera_alt),
-                title: const Text("Take Photo"),
+                leading: Icon(Icons.camera_alt),
+                title: Text("Take Photo"),
                 onTap: () {
                   Navigator.pop(context);
                   _takePhoto();
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.photo_library),
-                title: const Text("Choose from Gallery"),
+                leading: Icon(Icons.photo_library),
+                title: Text("Choose from Gallery"),
                 onTap: () {
                   Navigator.pop(context);
                   _pickFromGallery();
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.upload_file),
-                title: const Text("Upload File"),
+                leading: Icon(Icons.upload_file),
+                title: Text("Upload File"),
                 onTap: () {
                   Navigator.pop(context);
                   _pickFile();
@@ -456,9 +459,10 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
     );
   }
 
+  // msg for no upload proof
   void _showImageRequiredError() {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
+      SnackBar(
         content: Text('Please upload proof of delivery before confirming'),
         backgroundColor: Colors.red,
         duration: Duration(seconds: 3),
@@ -476,7 +480,7 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
     final docIdToUpdate = _deliveryDocId ?? widget.deliveryCode;
     if (docIdToUpdate == null || docIdToUpdate.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text('Invalid delivery reference'),
           backgroundColor: Colors.red,
         ),
@@ -501,14 +505,14 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
       //scaffold message
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
+          SnackBar(
             content: Text('Delivery confirmed!'),
             backgroundColor: Colors.green,
             duration: Duration(seconds: 2),
           ),
         );
       }
-      await Future.delayed(const Duration(seconds: 2));
+      await Future.delayed( Duration(seconds: 2));
       if (mounted) {
         Navigator.popUntil(context, (route) => route.isFirst);
       }
@@ -525,14 +529,14 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
     }
   }
 
-  /// Compress image and encode as Base64
+  // Compress image and encode as Base64
   Future<String> _compressAndEncodeImage(File imageFile) async {
     final Uint8List bytes = await imageFile.readAsBytes();
     img.Image? decoded = img.decodeImage(bytes);
     if (decoded == null) throw Exception('Unable to decode selected image');
 
     // Resize to max 1024px
-    const int maxSide = 1024;
+    int maxSide = 1024;
     if (decoded.width > maxSide || decoded.height > maxSide) {
       decoded = img.copyResize(
         decoded,
@@ -541,7 +545,6 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
       );
     }
 
-    // Compress to fit ~900KB
     int quality = 60;
     late Uint8List jpegBytes;
     for (;;) {
@@ -554,7 +557,7 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
     return base64Encode(jpegBytes);
   }
 
-  /// Update delivery document in Firestore
+  // update delivery document in Firestore
   Future<void> _updateDeliveryRecord(String docId, String proofBase64, DateTime now) async {
     await FirebaseFirestore.instance.collection('delivery').doc(docId).update({
       'status': 'Delivered',
@@ -576,7 +579,7 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
     if (deliveryData == null) {
       return Scaffold(
         appBar: AppBar(backgroundColor: Colors.white, elevation: 0),
-        body: const Center(child: Text('Delivery data is null')),
+        body: Center(child: Text('Delivery data is null')),
       );
     }
 
@@ -593,10 +596,10 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
         toolbarHeight: 80,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.black),
+          icon: Icon(Icons.arrow_back, color: Colors.black),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const Text(
+        title: Text(
           'Delivery Confirmation',
           style: TextStyle(
             color: Color(0xFF1B6C07),
@@ -606,7 +609,7 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
         ),
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -616,40 +619,40 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
               elevation: 2,
               color: Colors.white,
               child: Padding(
-                padding: const EdgeInsets.all(12),
+                padding: EdgeInsets.all(12),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     // Date
                     Text(
                       "Delivered At: $currentDate  $currentTime",
-                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
                     ),
-                    const SizedBox(height: 12),
+                    SizedBox(height: 12),
 
-                    // From section
-                    Text("From", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                    const SizedBox(height: 4),
+                    // From
+                    Text("From", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                    SizedBox(height: 4),
                     Row(
                       children: [
-                        const Icon(Icons.person, size: 14, color: Color(0xFF1B6C07)),
-                        const SizedBox(width: 4),
+                        Icon(Icons.person, size: 14, color: Color(0xFF1B6C07)),
+                        SizedBox(width: 4),
                         Expanded(
                           child: Text(
                             "${deliveryPersonnel?.name ?? "N/A"}",
-                            style: const TextStyle(fontSize: 12),
+                            style: TextStyle(fontSize: 12),
                           ),
                         ),
                       ],
                     ),
                     Row(
                       children: [
-                        const Icon(Icons.email, size: 14, color: Color(0xFF1B6C07)),
-                        const SizedBox(width: 4),
+                        Icon(Icons.email, size: 14, color: Color(0xFF1B6C07)),
+                        SizedBox(width: 4),
                         Expanded(
                           child: Text(
                             "${deliveryPersonnel?.email ?? "N/A"}",
-                            style: const TextStyle(fontSize: 12),
+                            style: TextStyle(fontSize: 12),
                           ),
                         ),
                       ],
@@ -657,51 +660,52 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Icon(Icons.location_on, size: 14, color: Color(0xFF1B6C07)),
-                        const SizedBox(width: 4),
+                        Icon(Icons.location_on, size: 14, color: Color(0xFF1B6C07)),
+                        SizedBox(width: 4),
                         Expanded(
                           child: Text(
                             "SPMS",
-                            style: const TextStyle(fontSize: 12),
+                            style: TextStyle(fontSize: 12),
                             softWrap: true,
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 12),
-                    // To section
-                    Text("To", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                    const SizedBox(height: 4),
+                    SizedBox(height: 12),
+
+                    // To
+                    Text("To", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                    SizedBox(height: 4),
                     Row(
                       children: [
-                        const Icon(Icons.person, size: 14, color: Color(0xFF1B6C07)),
-                        const SizedBox(width: 4),
+                        Icon(Icons.person, size: 14, color: Color(0xFF1B6C07)),
+                        SizedBox(width: 4),
                         Expanded(
                           child: Text(
                             "${recipient?.name ?? "N/A"}",
-                            style: const TextStyle(fontSize: 12),
+                            style: TextStyle(fontSize: 12),
                           ),
                         ),
                       ],
                     ),
                     Row(
                       children: [
-                        const Icon(Icons.email, size: 14, color: Color(0xFF1B6C07)),
-                        const SizedBox(width: 4),
+                        Icon(Icons.email, size: 14, color: Color(0xFF1B6C07)),
+                        SizedBox(width: 4),
                         Expanded(
-                          child: Text("${recipient?.email ?? "N/A"}", style: const TextStyle(fontSize: 12)),
+                          child: Text("${recipient?.email ?? "N/A"}", style:  TextStyle(fontSize: 12)),
                         ),
                       ],
                     ),
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Icon(Icons.location_on, size: 14, color: Color(0xFF1B6C07)),
-                        const SizedBox(width: 4),
+                        Icon(Icons.location_on, size: 14, color: Color(0xFF1B6C07)),
+                        SizedBox(width: 4),
                         Expanded(
                           child: Text(
                             "${recipient?.address ?? "N/A"}",
-                            style: const TextStyle(fontSize: 12),
+                            style: TextStyle(fontSize: 12),
                             softWrap: true,
                           ),
                         ),
@@ -727,16 +731,27 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
                   border: TableBorder.symmetric(
                     inside: BorderSide(color: Colors.grey.shade300),
                   ),
-                  columnWidths: const {
-                    0: FlexColumnWidth(2), // Item Name
-                    1: FlexColumnWidth(2), // Item(s) Delivered
+                  columnWidths: {
+                    0: FlexColumnWidth(1.5), // Item ID
+                    1: FlexColumnWidth(2), // Item Name
                     2: FlexColumnWidth(1), // Quantity
                   },
                   children: [
                     // Header row
                     TableRow(
                       decoration: BoxDecoration(color: Colors.grey.shade200),
-                      children: const [
+                      children: [
+                        //Item ID
+                        Padding(
+                          padding: EdgeInsets.all(8),
+                          child: Center(
+                            child: Text(
+                              'Item ID',
+                              style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ),
+                        //Item Name
                         Padding(
                           padding: EdgeInsets.all(8),
                           child: Center(
@@ -746,15 +761,7 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
                             ),
                           ),
                         ),
-                        Padding(
-                          padding: EdgeInsets.all(8),
-                          child: Center(
-                            child: Text(
-                              'Item(s) Delivered',
-                              style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                        ),
+                        //Quantity
                         Padding(
                           padding: EdgeInsets.all(8),
                           child: Center(
@@ -771,30 +778,33 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
                     ...deliveryItems.map((item) {
                       return TableRow(
                         children: [
+                          //ID
                           Padding(
-                            padding: const EdgeInsets.all(8),
-                            child: Center(
-                              child: Text(
-                                item.itemName ?? 'N/A',
-                                style: const TextStyle(fontSize: 10),
-                              ),
-                            ),
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.all(8),
+                            padding: EdgeInsets.all(8),
                             child: Center(
                               child: Text(
                                 item.itemID,
-                                style: const TextStyle(fontSize: 10),
+                                style: TextStyle(fontSize: 10),
                               ),
                             ),
                           ),
+                          //Name
                           Padding(
-                            padding: const EdgeInsets.all(8),
+                            padding: EdgeInsets.all(8),
+                            child: Center(
+                              child: Text(
+                                item.itemName ?? 'N/A',
+                                style: TextStyle(fontSize: 10),
+                              ),
+                            ),
+                          ),
+                          //Quantity
+                          Padding(
+                            padding: EdgeInsets.all(8),
                             child: Center(
                               child: Text(
                                 item.quantity.toString(),
-                                style: const TextStyle(fontSize: 10),
+                                style: TextStyle(fontSize: 10),
                               ),
                             ),
                           ),
@@ -806,6 +816,7 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
               ),
             ),
             SizedBox(height: 30),
+
             // Proof of Delivery
             Text(
               'Confirmation Summary',
@@ -815,33 +826,33 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
                 color: Colors.black,
               ),
             ),
-            const SizedBox(height: 10),
+            SizedBox(height: 10),
             Text.rich(
               TextSpan(
                 children: [
-                  const TextSpan(
+                  TextSpan(
                     text: 'Your items were delivered on ',
                     style: TextStyle(fontSize: 10),
                   ),
                   TextSpan(
                     text: currentDateFormatted,
-                    style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
+                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
                   ),
-                  const TextSpan(
+                   TextSpan(
                     text: ', at ',
                     style: TextStyle(fontSize: 10),
                   ),
                   TextSpan(
                     text: currentTimeFormatted,
-                    style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
+                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
                   ),
-                  const TextSpan(
+                  TextSpan(
                     text: '. Please check the items and contact us if there are any issues.',
                     style: TextStyle(fontSize: 10),
                   ),
                 ],
               ),
-              style: const TextStyle(height: 1.5),
+              style: TextStyle(height: 1.5),
             ),
             SizedBox(height: 8),
             GestureDetector(
@@ -854,7 +865,7 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: _imageFile == null
-                    ? const Center(child: Icon(Icons.camera_alt_outlined, size: 40, color: Colors.black54))
+                    ? Center(child: Icon(Icons.camera_alt_outlined, size: 40, color: Colors.black54))
                     : ClipRRect(
                   borderRadius: BorderRadius.circular(12),
                   child: Image.file(_imageFile!, fit: BoxFit.cover, width: double.infinity),
@@ -866,21 +877,21 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
       ),
 
       bottomNavigationBar: SafeArea(
-        minimum: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+        minimum: EdgeInsets.fromLTRB(20, 8, 20, 20),
         child: Row(
           children: [
             Expanded(
               child: ElevatedButton(
                 onPressed: _isUploading ? null : _handleConfirmation,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF1B6C07),
+                  backgroundColor: Color(0xFF1B6C07),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  padding: EdgeInsets.symmetric(vertical: 12),
                 ),
                 child: _isUploading
-                    ? const SizedBox(
+                    ? SizedBox(
                   height: 20,
                   width: 20,
                   child: CircularProgressIndicator(
@@ -888,7 +899,7 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
                     strokeWidth: 2,
                   ),
                 )
-                    : const Text(
+                    : Text(
                   'Confirm',
                   style: TextStyle(
                     color: Colors.white,
@@ -912,7 +923,7 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
       elevation: 0,
       centerTitle: true,
       toolbarHeight: 80,
-      title: const Text(
+      title: Text(
         'Delivery Confirmation',
         style: TextStyle(
             color:  Color(0xFF1B6C07),
@@ -920,11 +931,11 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
         ),
       ),
       leading: IconButton(
-        icon: const Icon(Icons.arrow_back, color: Colors.black),
+        icon: Icon(Icons.arrow_back, color: Colors.black),
         onPressed: () => Navigator.pop(context),
       ),
     ),
-    body: const Center(child: CircularProgressIndicator()),
+    body: Center(child: CircularProgressIndicator()),
   );
 
   Widget _errorScreen() => Scaffold(
@@ -934,7 +945,7 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
       elevation: 0,
       centerTitle: true,
       toolbarHeight: 80,
-      title: const Text(
+      title: Text(
         'Delivery Confirmation',
         style: TextStyle(
           color: Color(0xFF1B6C07),
@@ -943,27 +954,27 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
         ),
       ),
       leading: IconButton(
-        icon: const Icon(Icons.arrow_back, color: Colors.black),
+        icon: Icon(Icons.arrow_back, color: Colors.black),
         onPressed: () => Navigator.pop(context),
       ),
     ),
     body: Center(
       child: Padding(
-        padding: const EdgeInsets.all(20.0),
+        padding: EdgeInsets.all(20.0),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.error_outline, size: 64, color: Colors.red),
-            const SizedBox(height: 20),
+            Icon(Icons.error_outline, size: 64, color: Colors.red),
+            SizedBox(height: 20),
             Text(
               errorMessage ?? 'An error occurred',
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 16),
+              style: TextStyle(fontSize: 16),
             ),
-            const SizedBox(height: 20),
+            SizedBox(height: 20),
             ElevatedButton(
               onPressed: _loadData,
-              child: const Text('Retry'),
+              child: Text('Retry'),
             ),
           ],
         ),
