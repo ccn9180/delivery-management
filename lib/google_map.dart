@@ -4,11 +4,14 @@ import 'dart:math';
 import 'dart:ui' as ui;
 import 'dart:typed_data';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:delivery/changepassword.dart';
 import 'package:delivery/confirmation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show ByteData;
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:permission_handler/permission_handler.dart'
+    as permission_handler_plugin;
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 import 'config.dart';
@@ -83,16 +86,9 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
   bool _hasReachedDestination = false;
   bool _isExternalNavigationActive = false;
   bool _showDeliveryInfoCard = true;
-  double _arrivalThreshold = Config.arrivalThresholdMeters; // meters - consider arrived when within this distance
+  double _arrivalThreshold = Config
+      .arrivalThresholdMeters; // meters - consider arrived when within this distance
   _AppLifecycleObserver? _lifecycleObserver;
-
-  // Guidance banner enhancements
-  String _nextTurnText = "";           // e.g., In 120 m, Turn right onto Jalan ABC
-  String _followingTurnText = "";      // e.g., Then, Turn left onto Jalan DEF
-  String _etaText = "";                // e.g., 12 min
-
-  // Adaptive map padding with bottom sheet
-  double _mapBottomPadding = 170;
 
   // Navigation direction variables
   String _currentDirection = "Head towards destination";
@@ -184,7 +180,7 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
       }
 
       await _getCurrentLocation();
-      //Auto-start navigation after current location is found (toggleable via Config)
+      // 🚀 Auto-start navigation after current location is found (toggleable via Config)
       if (mounted && _currentPosition != null && Config.autoStartNavigation) {
         _startNavigation();
       }
@@ -200,7 +196,7 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
 
   Future<void> _getCurrentLocation() async {
     try {
-      //Try last known quickly to place camera fast
+      // 1) Try last known quickly to place camera fast
       Position? lastKnown = await Geolocator.getLastKnownPosition();
       if (mounted && lastKnown != null) {
         setState(() {
@@ -208,7 +204,7 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
         });
       }
 
-      // Request a fresh high-accuracy fix
+      // 2) Request a fresh high-accuracy fix
       Position position = await Geolocator.getCurrentPosition(
         desiredAccuracy: Config.locationAccuracy,
         timeLimit: const Duration(seconds: 12),
@@ -259,39 +255,39 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
     _positionStream?.cancel();
     _positionStream =
         Geolocator.getPositionStream(
-      locationSettings: LocationSettings(
-        accuracy: LocationAccuracy.bestForNavigation,
+          locationSettings: LocationSettings(
+            accuracy: LocationAccuracy.bestForNavigation,
             distanceFilter:
                 (_isNavigating
                         ? Config.navigationUpdateDistance
                         : Config.locationUpdateDistance)
                     .toInt(),
-      ),
-    ).listen(
+          ),
+        ).listen(
           (Position position) {
-        if (mounted) {
-          setState(() {
+            if (mounted) {
+              setState(() {
                 _currentPosition = LatLng(
                   position.latitude,
                   position.longitude,
                 );
-          });
-          if (_isNavigating && _destination != null) {
-            _updateNavigation(position);
-            // If we already have a route, keep it; otherwise draw now
-            if (_polylines.isEmpty) {
-              _showRouteDirection(_currentPosition!, _destination!);
-            } else {
-              _maybeReroute();
+              });
+              if (_isNavigating && _destination != null) {
+                _updateNavigation(position);
+                // If we already have a route, keep it; otherwise draw now
+                if (_polylines.isEmpty) {
+                  _showRouteDirection(_currentPosition!, _destination!);
+                } else {
+                  _maybeReroute();
+                }
+              }
             }
-          }
-        }
-      },
-      onError: (error) {
-        debugPrint('Location tracking error: $error');
-        // Don't show error to user, just log it
-      },
-    );
+          },
+          onError: (error) {
+            debugPrint('Location tracking error: $error');
+            // Don't show error to user, just log it
+          },
+        );
   }
 
   // Open native Google Maps (or web) for full turn-by-turn with road names
@@ -308,7 +304,8 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
     if (await canLaunchUrl(uri)) {
       setState(() {
         _isExternalNavigationActive = true;
-        _showDeliveryInfoCard = false; // Hide delivery info when external navigation is active
+        _showDeliveryInfoCard =
+            false; // Hide delivery info when external navigation is active
       });
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     }
@@ -486,6 +483,18 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
     } catch (_) {}
   }
 
+  void _stopNavigation() {
+    setState(() {
+      _isNavigating = false;
+      _polylines.clear();
+      _markers.clear();
+      _destination = null;
+      _hasReachedDestination = false;
+      _isExternalNavigationActive = false;
+      _showDeliveryInfoCard = true;
+    });
+  }
+
   // Check if driver has reached the destination
   void _checkDestinationArrival() {
     if (_currentPosition == null ||
@@ -602,10 +611,11 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
             TextButton(
               onPressed: () {
                 Navigator.of(context).pop();
-                // Stop navigation will stay at here
+                // Stop navigation and hide route
                 setState(() {
                   _isExternalNavigationActive = false;
                   _isNavigating = false;
+                  _polylines.clear();
                   _showDeliveryInfoCard = true;
                 });
               },
@@ -962,44 +972,25 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
       if (diff > Config.headingDeviationDegrees) {
         _maybeReroute();
       }
-      // Update next and following turn messages using nearest steps
+      // Update road/step name by finding the nearest step
       if (_navSteps.isNotEmpty) {
-        int nearestStepIndex = 0;
+        String? stepName;
         double minStepDist = double.infinity;
-        for (int i = 0; i < _navSteps.length; i++) {
-          for (final p in _navSteps[i].points) {
+        for (final s in _navSteps) {
+          for (final p in s.points) {
             final d = _distanceMeters(_currentPosition!, p);
             if (d < minStepDist) {
               minStepDist = d;
-              nearestStepIndex = i;
+              stepName = s.instruction;
             }
           }
         }
-
-        // Next turn text with approximate distance to the next step start
-        final _NavStep nextStep = _navSteps[nearestStepIndex];
-        double metersToNext = _distanceMeters(_currentPosition!, nextStep.points.first);
-        String distanceLabel = metersToNext < 50
-            ? "In ${metersToNext.toStringAsFixed(0)} m"
-            : "In ${metersToNext.round()} m";
-        _nextTurnText = nextStep.instruction.isNotEmpty
-            ? "$distanceLabel, ${nextStep.instruction}"
-            : _currentDirection;
-
-        // Following turn hint
-        if (nearestStepIndex + 1 < _navSteps.length) {
-          final _NavStep thenStep = _navSteps[nearestStepIndex + 1];
-          _followingTurnText = thenStep.instruction.isNotEmpty
-              ? "Then, ${thenStep.instruction}"
-              : "";
-        } else {
-          _followingTurnText = "";
+        if (stepName != null && stepName!.isNotEmpty) {
+          _currentDirection = stepName!; // show real instruction with road name
         }
       }
     } else {
       _currentDirection = "You have arrived at your destination";
-      _nextTurnText = _currentDirection;
-      _followingTurnText = "";
     }
   }
 
@@ -1061,7 +1052,8 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
     double lat1Rad = origin.latitude * (pi / 180);
     double lat2Rad = destination.latitude * (pi / 180);
     double deltaLatRad = (destination.latitude - origin.latitude) * (pi / 180);
-    double deltaLngRad =(destination.longitude - origin.longitude) * (pi / 180);
+    double deltaLngRad =
+        (destination.longitude - origin.longitude) * (pi / 180);
 
     double a =
         sin(deltaLatRad / 2) * sin(deltaLatRad / 2) +
@@ -1083,34 +1075,163 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
     final double lat2 = b.latitude * (pi / 180);
     final double sinDLat = sin(dLat / 2);
     final double sinDLng = sin(dLng / 2);
-    final double aVal = sinDLat * sinDLat + sinDLng * sinDLng * cos(lat1) * cos(lat2);
+    final double aVal =
+        sinDLat * sinDLat + sinDLng * sinDLng * cos(lat1) * cos(lat2);
     final double c = 2 * atan2(sqrt(aVal), sqrt(1 - aVal));
     return earthRadius * c;
   }
 
-  // Get estimated delivery time based on distance and delivery items
+  // Cache for estimated time to avoid excessive API calls
+  String? _cachedEstimatedTime;
+  DateTime? _lastEstimatedTimeUpdate;
+  static const Duration _cacheValidityDuration = Duration(minutes: 5);
+
+  // Get estimated delivery time using Google Directions API (same as deep link)
   String _getEstimatedDeliveryTime() {
     if (_currentPosition == null || _destination == null) {
       return "Estimated Time: 20-30 minutes";
     }
 
+    // Return cached result if still valid
+    if (_cachedEstimatedTime != null && 
+        _lastEstimatedTimeUpdate != null &&
+        DateTime.now().difference(_lastEstimatedTimeUpdate!) < _cacheValidityDuration) {
+      return _cachedEstimatedTime!;
+    }
+
+    // Use Google Directions API for accurate time estimation
+    _fetchEstimatedTimeFromGoogleAPI();
+    
+    // Return fallback while API call is in progress
+    return _getFallbackEstimatedTime();
+  }
+
+  // Fallback calculation when API is not available
+  String _getFallbackEstimatedTime() {
     double distance = _calculateDistanceInKm(_currentPosition!, _destination!);
-    // Apply a "road factor" to approximate actual travel distance
-    // roads usually 1.3x–1.8x longer than straight line
-    distance *= 1.5;
+    int baseMinutes = (distance * 2.5).round(); // Base time: 2.5 min per km
 
-    // Assume average speed 30 km/h (2 min per km)
-    int baseMinutes = (distance * 6.5).round();
+    // Add extra time based on delivery items count
+    int itemCount = widget.deliveryItems?.length ?? 1;
+    int extraMinutes = (itemCount * 2).clamp(0, 15); // 2 min per item, max 15 min
 
-    // Add variability range (±20%)
-    int minTime = (baseMinutes * 0.8).round();
-    int maxTime = (baseMinutes * 1.2).round();
-
-    // Prevent unrealistically small times
-    minTime = minTime < 2 ? 2 : minTime;
-    maxTime = maxTime < 2 ? 2 : maxTime;
+    int totalMinutes = baseMinutes + extraMinutes;
+    int minTime = (totalMinutes * 0.8).round(); // 80% of calculated time
+    int maxTime = (totalMinutes * 1.2).round(); // 120% of calculated time
 
     return "Estimated Time: $minTime-$maxTime minutes";
+  }
+
+  // Fetch estimated time from Google Directions API (same as deep link)
+  Future<void> _fetchEstimatedTimeFromGoogleAPI() async {
+    try {
+      String url = 'https://maps.googleapis.com/maps/api/directions/json?'
+          'origin=${_currentPosition!.latitude},${_currentPosition!.longitude}&'
+          'destination=${_destination!.latitude},${_destination!.longitude}&'
+          'mode=driving&'
+          'departure_time=now&' // Use current time for traffic-aware estimates
+          'traffic_model=best_guess&' // Same as Google Maps deep link
+          'key=$_googleApiKey';
+
+      final response = await http.get(Uri.parse(url));
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        
+        if (data['status'] == 'OK' && data['routes'].isNotEmpty) {
+          final routes = data['routes'] as List;
+          final legs = routes[0]['legs'] as List;
+          
+          if (legs.isNotEmpty) {
+            // Get duration in traffic (same as deep link)
+            final durationInTraffic = legs[0]['duration_in_traffic'];
+            final duration = durationInTraffic ?? legs[0]['duration'];
+            
+            if (duration != null) {
+              String durationText = duration['text'];
+              int durationValue = duration['value']; // seconds
+              
+              // Add extra time based on delivery items count
+              int itemCount = widget.deliveryItems?.length ?? 1;
+              int extraMinutes = (itemCount * 2).clamp(0, 15); // 2 min per item, max 15 min
+              int extraSeconds = extraMinutes * 60;
+              
+              int totalSeconds = durationValue + extraSeconds;
+              int totalMinutes = (totalSeconds / 60).round();
+              
+              // Update cache
+              _cachedEstimatedTime = "Estimated Time: $totalMinutes minutes";
+              _lastEstimatedTimeUpdate = DateTime.now();
+              
+              // Update UI if mounted
+              if (mounted) {
+                setState(() {});
+              }
+              
+              return;
+            }
+          }
+        }
+      }
+      
+      // If API call fails, use fallback
+      _cachedEstimatedTime = _getFallbackEstimatedTime();
+      _lastEstimatedTimeUpdate = DateTime.now();
+      
+    } catch (e) {
+      debugPrint('Error fetching estimated time from Google API: $e');
+      // Use fallback on error
+      _cachedEstimatedTime = _getFallbackEstimatedTime();
+      _lastEstimatedTimeUpdate = DateTime.now();
+    }
+  }
+
+  Future<void> _calculateRoute(LatLng origin, LatLng destination) async {
+    try {
+      List<LatLng> polylineCoordinates = await _getRouteCoordinates(
+        origin,
+        destination,
+      );
+      if (polylineCoordinates.isNotEmpty) {
+        Polyline polyline = Polyline(
+          polylineId: const PolylineId("route"),
+          color: Colors.blue,
+          width: 5,
+          points: polylineCoordinates,
+        );
+
+        Set<Marker> markers = {
+          Marker(
+            markerId: const MarkerId("origin"),
+            position: origin,
+            infoWindow: const InfoWindow(title: "Current Location"),
+            icon: BitmapDescriptor.defaultMarkerWithHue(
+              BitmapDescriptor.hueGreen,
+            ),
+          ),
+          Marker(
+            markerId: const MarkerId("destination"),
+            position: destination,
+            infoWindow: const InfoWindow(title: "Delivery Destination"),
+            icon: BitmapDescriptor.defaultMarkerWithHue(
+              BitmapDescriptor.hueRed,
+            ),
+          ),
+        };
+
+        setState(() {
+          _polylines = {polyline};
+          _markers = markers;
+          _isCalculatingRoute = false;
+        });
+
+        _fitCameraToRoute(polylineCoordinates);
+      }
+    } catch (e) {
+      setState(() {
+        _isCalculatingRoute = false;
+      });
+    }
   }
 
   Future<List<LatLng>> _getRouteCoordinates(
@@ -1185,9 +1306,9 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
     final double lng2 =
         lng1 +
         atan2(
-      sin(bearingRad) * sin(delta) * cos(lat1),
-      cos(delta) - sin(lat1) * sin(lat2),
-    );
+          sin(bearingRad) * sin(delta) * cos(lat1),
+          cos(delta) - sin(lat1) * sin(lat2),
+        );
 
     return LatLng(lat2 * (180 / pi), ((lng2 * (180 / pi) + 540) % 360) - 180);
   }
@@ -1312,18 +1433,18 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
             tilt: 80,
           ),
           myLocationEnabled: true,
-          myLocationButtonEnabled: false,
+          myLocationButtonEnabled: true,
           zoomControlsEnabled: false,
           mapToolbarEnabled: false,
-          compassEnabled: false,
+          compassEnabled: true,
           trafficEnabled: true,
           buildingsEnabled: true,
           indoorViewEnabled: true,
           tiltGesturesEnabled: true,
           rotateGesturesEnabled: true,
-          padding: EdgeInsets.only(
+          padding: const EdgeInsets.only(
             top: 80,
-            bottom: _mapBottomPadding,
+            bottom: 170,
             left: 6,
             right: 6,
           ),
@@ -1339,15 +1460,15 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
           markers: _isNavigating
               ? _markers
               : {
-            Marker(
-              markerId: const MarkerId("current_user"),
-              position: _currentPosition!,
-              infoWindow: const InfoWindow(title: "You are here"),
+                  Marker(
+                    markerId: const MarkerId("current_user"),
+                    position: _currentPosition!,
+                    infoWindow: const InfoWindow(title: "You are here"),
                     icon: BitmapDescriptor.defaultMarkerWithHue(
                       BitmapDescriptor.hueAzure,
                     ),
                   ),
-          },
+                },
           polylines: _polylines,
           onMapCreated: (GoogleMapController controller) {
             _mapController = controller;
@@ -1393,8 +1514,8 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
         // Re-center button to re-enter follow mode
         if (!_isFollowMode)
           Positioned(
-            bottom: 120,
-            left: 10,
+            bottom: 200,
+            left: 16,
             child: ElevatedButton.icon(
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.white,
@@ -1410,8 +1531,9 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
             ),
           ),
         // Navigation control buttons (bottom right)
+        if (_isNavigating && !_hasReachedDestination)
           Positioned(
-            bottom: 120,
+            bottom: 200,
             right: 16,
             child: Column(
               children: [
@@ -1473,7 +1595,7 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
             ),
           ),
 
-        // Compact guidance banner (with next/then + ETA)
+        // Compact guidance banner
         if (_isNavigating && _destination != null && !_isCalculatingRoute)
           Positioned(
             top: 60,
@@ -1504,357 +1626,324 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
                   ),
                   const SizedBox(width: 10),
                   Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          _nextTurnText.isNotEmpty ? _nextTurnText : _currentDirection,
+                    child: Text(
+                      _currentDirection,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        if (_followingTurnText.isNotEmpty)
-                          Text(
-                            _followingTurnText,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
-                          ),
-                      ],
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                   const SizedBox(width: 8),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text(
-                        _etaText.isNotEmpty ? _etaText : _calculateEstimatedTime(_currentPosition!, _destination!),
-                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black87),
-                      ),
                   Text(
                     _calculateDistance(_currentPosition!, _destination!),
-                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.blue),
-                      ),
-                    ],
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.blue,
+                    ),
                   ),
                 ],
               ),
             ),
           ),
 
-        // Draggable delivery info sheet: pull up/down like a drawer
+        // Draggable delivery info
         if (_showDeliveryInfoCard)
           DraggableScrollableSheet(
-            initialChildSize: 0.18, // collapsed height
+            initialChildSize: 0.18,
+            // collapsed height
             minChildSize: 0.12,
-            maxChildSize: 0.40,
+            maxChildSize: 0.4,
             snap: true,
-            snapSizes: const [0.18, 0.40],
+            snapSizes: const [0.18, 0.4],
             builder: (context, scrollController) {
               return Container(
                 decoration: const BoxDecoration(
-                  color: Colors.transparent, // Changed to transparent
+                  color: Color(0xFF1B6C07),
                   borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
                 ),
-                child: Container(
-                  decoration: const BoxDecoration(
-                    color: Color(0xFF1B6C07),
-                    borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-                  ),
-                  child: SingleChildScrollView(
-                    controller: scrollController,
-                    physics: const ClampingScrollPhysics(),
-                    child: IntrinsicHeight(
-                      child: Container(
-                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            // Grip
-                            Container(
-                              width: 36,
-                              height: 8,
-                              margin: const EdgeInsets.only(bottom: 12),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.6),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                            ),
-                            Text(
-                              '#${widget.deliveryCode ?? "Default code"}',
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                child: SingleChildScrollView(
+                  controller: scrollController,
+                  physics: const BouncingScrollPhysics(),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Grip
+                      Container(
+                        width: 36,
+                        height: 4,
+                        margin: const EdgeInsets.only(bottom: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.6),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                      Text(
+                        '#${widget.deliveryCode ?? "Default code"}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 15),
+                      Row(
+                        children: [
+                          const Icon(Icons.location_on, color: Colors.white),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              widget.deliveryAddress ?? "Address Invalid",
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
                                 color: Colors.white,
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
                               ),
                             ),
-                            const SizedBox(height: 16),
-                            Row(
-                              children: [
-                                const Icon(Icons.location_on, color: Colors.white, size: 20),
-                                const SizedBox(width: 6),
-                                Expanded(
-                                  child: Text(
-                                    widget.deliveryAddress ?? "Address Invalid",
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 13,
-                                    ),
-                                  ),
-                                ),
-                              ],
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 15),
+                      Row(
+                        children: [
+                          const Icon(Icons.timer, color: Colors.white),
+                          const SizedBox(width: 8),
+                          Text(
+                            _getEstimatedDeliveryTime(),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 13,
                             ),
-                            const SizedBox(height: 12),
-                            Row(
-                              children: [
-                                const Icon(Icons.timer, color: Colors.white, size: 20),
-                                const SizedBox(width: 8),
-                                Text(
-                                  _getEstimatedDeliveryTime(),
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 13,
-                                  ),
-                                ),
-                              ],
-                            ),
-
-                            if (_hasReachedDestination) ...[
-                              const SizedBox(height: 12),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 10,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.green.withOpacity(0.3),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: const Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(Icons.location_on, color: Colors.white),
-                                    SizedBox(width: 8),
-                                    Text(
-                                      "Destination Reached!",
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                            if (_isExternalNavigationActive) ...[
-                              const SizedBox(height: 12),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 10,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.blue.withOpacity(0.3),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: const Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(Icons.map, color: Colors.white),
-                                    SizedBox(width: 8),
-                                    Text(
-                                      "External Navigation Active",
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-
-                            const SizedBox(height: 16),
-                            ElevatedButton(
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.white,
-                                minimumSize: const Size.fromHeight(44),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                foregroundColor: const Color(0xFF1B6C07),
-                              ),
-                              onPressed: () {
-                                showDialog(
-                                  context: context,
-                                  builder: (context) {
-                                    return StatefulBuilder(
-                                      builder: (context, setState) {
-                                        return AlertDialog(
-                                          title: const Text(
-                                            "Delivery Status",
-                                            style: TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 20,
-                                            ),
-                                          ),
-                                          content: Column(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              // Show buttons OR reason input based on flag
-                                              if (!showReasonField) ...[
-                                                Row(
-                                                  children: [
-                                                    // Failed Button
-                                                    Expanded(
-                                                      child: SizedBox(
-                                                        height: 48,
-                                                        child: ElevatedButton(
-                                                          style: ElevatedButton.styleFrom(
-                                                            backgroundColor: Colors.red,
-                                                          ),
-                                                          onPressed: () {
-                                                            setState(() {
-                                                              showReasonField = true;
-                                                            });
-                                                          },
-                                                          child: const FittedBox(
-                                                            fit: BoxFit.scaleDown,
-                                                            child: Text(
-                                                              "Failed",
-                                                              style: TextStyle(
-                                                                color: Colors.white,
-                                                                fontWeight: FontWeight.bold,
-                                                                fontSize: 12.5,
-                                                              ),
-                                                            ),
-                                                          ),
-                                                        ),
-                                                      ),
-                                                    ),
-
-                                                    const SizedBox(width: 20), // spacing
-
-                                                    // Confirmed Button
-                                                    Expanded(
-                                                      child: SizedBox(
-                                                        height: 48,
-                                                        child: ElevatedButton(
-                                                          style: ElevatedButton.styleFrom(
-                                                            backgroundColor: Colors.green,
-                                                          ),
-                                                          onPressed: () {
-                                                            Navigator.push(
-                                                              context,
-                                                              MaterialPageRoute(
-                                                                builder: (context) => ConfirmationPage(
-                                                                  deliveryCode: widget.deliveryCode,
-                                                                  deliveryAddress: widget.deliveryAddress,
-                                                                  deliveryItems: widget.deliveryItems,
-                                                                ),
-                                                              ),
-                                                            );
-                                                          },
-                                                          child: const FittedBox(
-                                                            fit: BoxFit.scaleDown,
-                                                            child: Text(
-                                                              "Confirmed",
-                                                              style: TextStyle(
-                                                                color: Colors.white,
-                                                                fontWeight: FontWeight.bold,
-                                                              ),
-                                                            ),
-                                                          ),
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                              ],
-                                              // Reason input view
-                                              if (showReasonField) ...[
-                                                TextField(
-                                                  controller: reasonController,
-                                                  decoration: const InputDecoration(
-                                                    labelText: "Enter reason for failure",
-                                                    border: OutlineInputBorder(),
-                                                  ),
-                                                  keyboardType: TextInputType.multiline,
-                                                  minLines: 1,
-                                                  maxLines: 5,
-                                                  textInputAction: TextInputAction.done,
-                                                  onSubmitted: (_) => _submitReason(), // Press Enter to submit
-                                                ),
-                                                const SizedBox(height: 8),
-                                                Row(
-                                                  children: [
-                                                    // Back Button
-                                                    Expanded(
-                                                      child: ElevatedButton(
-                                                        style: ElevatedButton.styleFrom(
-                                                          backgroundColor: Colors.grey,
-                                                        ),
-                                                        onPressed: () {
-                                                          setState(() {
-                                                            showReasonField = false;
-                                                            reasonController.clear();
-                                                          });
-                                                        },
-                                                        child: const Text(
-                                                          "Back",
-                                                          style: TextStyle(
-                                                            color: Colors.white,
-                                                            fontWeight: FontWeight.bold,
-                                                          ),
-                                                        ),
-                                                      ),
-                                                    ),
-                                                    const SizedBox(width: 12),
-                                                    // Submit Button
-                                                    Expanded(
-                                                      child: ElevatedButton(
-                                                        style: ElevatedButton.styleFrom(
-                                                          backgroundColor: Colors.red,
-                                                        ),
-                                                        onPressed: _submitReason, // Reuse the same function
-                                                        child: const Text(
-                                                          "Submit",
-                                                          style: TextStyle(
-                                                            color: Colors.white,
-                                                            fontWeight: FontWeight.bold,
-                                                          ),
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                              ],
-                                            ],
-                                          ),
-                                        );
-                                      },
-                                    );
-                                  },
-                                );
-                              },
-                              child: const Text(
-                                "Update",
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      if (_hasReachedDestination) ...[
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.green.withOpacity(0.3),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.location_on, color: Colors.white),
+                              SizedBox(width: 8),
+                              Text(
+                                "Destination Reached!",
                                 style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 14,
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
+                        const SizedBox(height: 10),
+                      ],
+                      if (_isExternalNavigationActive) ...[
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.withOpacity(0.3),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.map, color: Colors.white),
+                              SizedBox(width: 8),
+                              Text(
+                                "External Navigation Active",
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                      ],
+
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.white,
+                          minimumSize: const Size.fromHeight(36),
+                          foregroundColor: Colors.green,
+                        ),
+                        onPressed: () {
+                          showDialog(
+                            context: context,
+                            builder: (context) {
+                              return StatefulBuilder(
+                                builder: (context, setState) {
+                                  return AlertDialog(
+                                    title: const Text(
+                                      "Delivery Status",
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 20,
+                                      ),
+                                    ),
+                                    content: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        // Show buttons OR reason input based on flag
+                                        if (!showReasonField) ...[
+                                          Row(
+                                            children: [
+                                              // Failed Button
+                                              Expanded(
+                                                child: SizedBox(
+                                                  height: 48,
+                                                  child: ElevatedButton(
+                                                    style: ElevatedButton.styleFrom(
+                                                      backgroundColor: Colors.red,
+                                                    ),
+                                                    onPressed: () {
+                                                      setState(() {
+                                                        showReasonField = true;
+                                                      });
+                                                    },
+                                                    child: const FittedBox(
+                                                      fit: BoxFit.scaleDown,
+                                                      child: Text(
+                                                        "Failed",
+                                                        style: TextStyle(
+                                                          color: Colors.white,
+                                                          fontWeight: FontWeight.bold,
+                                                          fontSize: 12.5,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+
+                                              const SizedBox(width: 12), // spacing
+
+                                              // Confirmed Button
+                                              Expanded(
+                                                child: SizedBox(
+                                                  height: 48,
+                                                  child: ElevatedButton(
+                                                    style: ElevatedButton.styleFrom(
+                                                      backgroundColor: Colors.green,
+                                                    ),
+                                                    onPressed: () {
+                                                      Navigator.pop(context);
+                                                      Navigator.pushAndRemoveUntil(
+                                                        context,
+                                                        MaterialPageRoute(
+                                                          builder: (context) => ConfirmationPage(
+                                                            deliveryCode: widget.deliveryCode,
+                                                            deliveryAddress: widget.deliveryAddress,
+                                                            deliveryItems: widget.deliveryItems,
+                                                          ),
+                                                        ),
+                                                            (route) => route.isFirst,
+                                                      );
+                                                    },
+                                                    child: const FittedBox(
+                                                      fit: BoxFit.scaleDown,
+                                                      child: Text(
+                                                        "Confirmed",
+                                                        style: TextStyle(
+                                                          color: Colors.white,
+                                                          fontWeight: FontWeight.bold,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ],
+                                        // Reason input view
+                                        if (showReasonField) ...[
+                                          TextField(
+                                            controller: reasonController,
+                                            decoration: const InputDecoration(
+                                              labelText: "Enter reason for failure",
+                                              border: OutlineInputBorder(),
+                                            ),
+                                            keyboardType: TextInputType.multiline,
+                                            minLines: 1,
+                                            maxLines: 5,
+                                            textInputAction: TextInputAction.done,
+                                            onSubmitted: (_) => _submitReason(), // Press Enter to submit
+                                          ),
+                                          const SizedBox(height: 8),
+                                          Row(
+                                            children: [
+                                              // Back Button
+                                              Expanded(
+                                                child: ElevatedButton(
+                                                  style: ElevatedButton.styleFrom(
+                                                    backgroundColor: Colors.grey,
+                                                  ),
+                                                  onPressed: () {
+                                                    setState(() {
+                                                      showReasonField = false;
+                                                      reasonController.clear();
+                                                    });
+                                                  },
+                                                  child: const Text(
+                                                    "Back",
+                                                    style: TextStyle(
+                                                      color: Colors.white,
+                                                      fontWeight: FontWeight.bold,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                              const SizedBox(width: 12),
+                                              // Submit Button
+                                              Expanded(
+                                                child: ElevatedButton(
+                                                  style: ElevatedButton.styleFrom(
+                                                    backgroundColor: Colors.red,
+                                                  ),
+                                                  onPressed: _submitReason, // Reuse the same function
+                                                  child: const Text(
+                                                    "Submit",
+                                                    style: TextStyle(
+                                                      color: Colors.white,
+                                                      fontWeight: FontWeight.bold,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                  );
+                                },
+                              );
+                            },
+                          );
+                        },
+                        child: const Text("Update",style: TextStyle(fontWeight: FontWeight.bold),),
                       ),
-                    ),
+                    ],
                   ),
                 ),
               );
