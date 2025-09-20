@@ -267,7 +267,6 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
 
         deliveryStatus = deliveryData!['status']?.toString() ?? 'Unknown Status';
 
-        // Resolve delivery personnel: prefer employeeID on delivery doc, fallback to current user
         final String employeeID = (deliveryData!['employeeID'] ?? deliveryData!['employedID'] ?? '')
             .toString()
             .trim();
@@ -280,7 +279,6 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
 
         DeliveryPersonnel? resolvedPersonnel;
 
-        // 1) Try by employeeID from delivery doc
         if (employeeID.isNotEmpty) {
           final byEmployeeId = await FirebaseFirestore.instance
               .collection('users')
@@ -292,7 +290,6 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
           }
         }
 
-        // 2) Fallback to current logged-in user (by uid)
         if (resolvedPersonnel == null) {
           final currentUser = FirebaseAuth.instance.currentUser;
           if (currentUser != null) {
@@ -306,7 +303,6 @@ class _ConfirmationPageState extends State<ConfirmationPage> {
           }
         }
 
-        // 3) Fallback to current logged-in user's email lookup
         if (resolvedPersonnel == null) {
           final currentUser = FirebaseAuth.instance.currentUser;
           final email = currentUser?.email;
